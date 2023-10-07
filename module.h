@@ -37,7 +37,7 @@ public:
 	CMemory FindPatternSIMD(const void* pPattern, const std::string_view szMask, const CMemory startAddress = nullptr, const ModuleSections_t* moduleSection = nullptr) const;
 	CMemory FindPatternSIMD(const std::string_view svPattern, const CMemory startAddress = nullptr, const ModuleSections_t* moduleSection = nullptr) const;
 
-	CMemory GetVirtualTableByName(const std::string_view svTableName, bool bFullName = false) const;
+	CMemory FindVirtualTableByName(const std::string_view svTableName, bool bFullName = false) const;
 
 	ModuleSections_t GetSectionByName(const std::string_view svSectionName) const;
 	uintptr_t        GetModuleBase() const;

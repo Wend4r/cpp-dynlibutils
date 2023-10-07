@@ -292,7 +292,7 @@ CMemory CModule::FindPatternSIMD(const std::string_view svPattern, const CMemory
 // Input  : svTableName
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool bFullName) const
+CMemory CModule::FindVirtualTableByName(const std::string_view svTableName, bool bFullName) const
 {
 	if (!m_ExecutableCode.IsSectionValid())
 		return CMemory();
