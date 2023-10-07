@@ -4,8 +4,9 @@
 #pragma once
 #endif
 
-#include <string>
 #include <vector>
+#include <string>
+#include <string_view>
 #include "memaddr.h"
 
 class CModule
@@ -27,17 +28,21 @@ public:
 		size_t    m_nSectionSize{};          // Size of section.
 	};
 
-	CModule(const std::string_view szModuleName);
+	CModule() = default;
+	explicit CModule(const std::string_view szModuleName);
+	explicit CModule(const char* szModuleName) : CModule(std::string_view(szModuleName)) {};
+	explicit CModule(const std::string& szModuleName) : CModule(std::string_view(szModuleName)) {};
 	CModule(const CMemory pModuleMemory);
 
 	void InitFromName(const std::string_view szModuleName);
 	void InitFromMemory(const CMemory pModuleMemory);
 
 	static std::pair<std::vector<uint8_t>, std::string> PatternToMaskedBytes(const std::string_view svInput);
-	CMemory FindPatternSIMD(const void* pPattern, const std::string_view szMask, const CMemory startAddress = nullptr, const ModuleSections_t* moduleSection = nullptr) const;
-	CMemory FindPatternSIMD(const std::string_view svPattern, const CMemory startAddress = nullptr, const ModuleSections_t* moduleSection = nullptr) const;
+	CMemory FindPatternSIMD(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress = nullptr, const ModuleSections_t* moduleSection = nullptr) const;
+	CMemory FindPatternSIMD(const std::string_view svPattern, const CMemory pStartAddress = nullptr, const ModuleSections_t* moduleSection = nullptr) const;
 
-	CMemory FindVirtualTableByName(const std::string_view svTableName, bool bFullName = false) const;
+	CMemory FindVirtualTableByName(const std::string_view svTableName, bool bDecorated = false) const;
+	CMemory FindFunctionByName(const std::string_view svFunctionName) const;
 
 	ModuleSections_t GetSectionByName(const std::string_view svSectionName) const;
 	uintptr_t        GetModuleBase() const;

@@ -199,13 +199,13 @@ std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(const
 // Purpose: find array of bytes in process memory using SIMD instructions
 // Input  : *pPattern - first and last byte must be known
 //          szMask
-//          startAddress
+//          pStartAddress
 //          *moduleSection
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::FindPatternSIMD(const void* pPattern, const std::string_view szMask, const CMemory startAddress, const ModuleSections_t* moduleSection) const
+CMemory CModule::FindPatternSIMD(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress, const ModuleSections_t* moduleSection) const
 {
-	const uint8_t* pattern = reinterpret_cast<const uint8_t*>(pPattern);
+	const uint8_t* pattern = pPattern.RCast<const uint8_t*>();
 	const ModuleSections_t* section = moduleSection ? moduleSection : &m_ExecutableCode;
 	if (!section->IsSectionValid())
 		return CMemory();
@@ -217,13 +217,13 @@ CMemory CModule::FindPatternSIMD(const void* pPattern, const std::string_view sz
 	const uint8_t* pData = reinterpret_cast<uint8_t*>(nBase);
 	const uint8_t* pEnd = pData + nSize - nMaskLen;
 
-	if(startAddress)
+	if(pStartAddress)
 	{
-		const uint8_t* pStartAddress = startAddress.RCast<uint8_t*>();
-		if(pData > pStartAddress || pStartAddress > pEnd)
+		const uint8_t* startAddress = pStartAddress.RCast<uint8_t*>();
+		if(pData > startAddress || startAddress > pEnd)
 			return CMemory();
 
-		pData = pStartAddress;
+		pData = startAddress;
 	}
 
 	int nMasks[64]; // 64*16 = enough masks for 1024 bytes.
@@ -277,45 +277,46 @@ CMemory CModule::FindPatternSIMD(const void* pPattern, const std::string_view sz
 //-----------------------------------------------------------------------------
 // Purpose: find a string pattern in process memory using SIMD instructions
 // Input  : svPattern - first and last byte must be known
-//          startAddress
+//          pStartAddress
 //			*moduleSection
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::FindPatternSIMD(const std::string_view svPattern, const CMemory startAddress, const ModuleSections_t* moduleSection) const
+CMemory CModule::FindPatternSIMD(const std::string_view svPattern, const CMemory pStartAddress, const ModuleSections_t* moduleSection) const
 {
 	const std::pair patternInfo = PatternToMaskedBytes(svPattern);
-	return FindPatternSIMD(patternInfo.first.data(), patternInfo.second, startAddress, moduleSection);
+	return FindPatternSIMD(patternInfo.first.data(), patternInfo.second, pStartAddress, moduleSection);
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: get address of a virtual method table by rtti type descriptor name
 // Input  : svTableName
+//          bDecorated
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::FindVirtualTableByName(const std::string_view svTableName, bool bFullName) const
+CMemory CModule::FindVirtualTableByName(const std::string_view svTableName, bool bDecorated) const
 {
 	if (!m_ExecutableCode.IsSectionValid())
 		return CMemory();
 
-	std::string szFullTableName;
-	if (bFullName)
+	std::string szDecoratedTableName;
+	if (bDecorated)
 	{
-		szFullTableName.assign(svTableName);
+		szDecoratedTableName.assign(svTableName);
 	}
 	else
 	{
 #if defined _WIN32 && _M_X64
-		szFullTableName.assign(".?AV" + std::string(svTableName) + "@@");
+		szDecoratedTableName.assign(".?AV" + std::string(svTableName) + "@@");
 #else
-		szFullTableName.assign(std::to_string(svTableName.length()) + std::string(svTableName));
+		szDecoratedTableName.assign(std::to_string(svTableName.length()) + std::string(svTableName));
 #endif
 	}
 
-	std::string szMask(szFullTableName.length() + 1, 'x');
+	std::string szMask(szDecoratedTableName.length() + 1, 'x');
 
 #if defined _WIN32 && _M_X64
 	CModule::ModuleSections_t runTimeData = GetSectionByName(".data");
-	CMemory typeDescriptorName = FindPatternSIMD(szFullTableName.data(), szMask, nullptr, &runTimeData);
+	CMemory typeDescriptorName = FindPatternSIMD(szDecoratedTableName.data(), szMask, nullptr, &runTimeData);
 	if (!typeDescriptorName)
 		return CMemory();
 	
@@ -332,7 +333,7 @@ CMemory CModule::FindVirtualTableByName(const std::string_view svTableName, bool
 		if (reference.Offset(-0xC).GetValue<int32_t>() == 1 && reference.Offset(-0x8).GetValue<int32_t>() == 0)
 		{
 			CMemory referenceOffset = reference.Offset(-0xC);
-			CMemory rttiCompleteObjectLocator = FindPatternSIMD(&referenceOffset, "xxxxxxxx", nullptr, &readOnlyData);
+			CMemory rttiCompleteObjectLocator = FindPatternSIMD(referenceOffset, "xxxxxxxx", nullptr, &readOnlyData);
 			if(rttiCompleteObjectLocator)
 				return rttiCompleteObjectLocator.Offset(0x8);
 		}
@@ -340,7 +341,7 @@ CMemory CModule::FindVirtualTableByName(const std::string_view svTableName, bool
 		reference.OffsetSelf(0x4);
 	}
 #else
-	CMemory typeInfoName = FindPatternSIMD(szFullTableName.data(), szMask);
+	CMemory typeInfoName = FindPatternSIMD(szDecoratedTableName.data(), szMask);
 	if(!typeInfoName)
 		return CMemory();
 
@@ -363,6 +364,23 @@ CMemory CModule::FindVirtualTableByName(const std::string_view svTableName, bool
 #endif
 
 	return CMemory();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: get address of a virtual method table by rtti type descriptor name
+// Input  : svFunctionName
+// Output : CMemory
+//-----------------------------------------------------------------------------
+CMemory CModule::FindFunctionByName(const std::string_view svFunctionName) const
+{
+	if(!m_pModuleBase)
+		return CMemory();
+
+#if defined _WIN32 && _M_X64
+	return GetProcAddress(reinterpret_cast<HMODULE>(m_pModuleBase), svFunctionName.data());
+#else
+	return dlsym(reinterpret_cast<void*>(m_pModuleBase), svFunctionName.data());
+#endif
 }
 
 //-----------------------------------------------------------------------------
