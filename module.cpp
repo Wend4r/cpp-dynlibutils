@@ -30,7 +30,7 @@ CModule::CModule(const CMemory pModuleMemory)
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: initializes class from module name (without extension .dll/.so)
+// Purpose: Initializes the module from module name (without extension .dll/.so)
 // Input  : szModuleName
 //-----------------------------------------------------------------------------
 bool CModule::InitFromName(const std::string_view szModuleName)
@@ -79,7 +79,7 @@ bool CModule::InitFromName(const std::string_view szModuleName)
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: initializes class from module memory
+// Purpose: Initializes the module from module memory
 // Input  : pModuleMemory
 //-----------------------------------------------------------------------------
 bool CModule::InitFromMemory(const CMemory pModuleMemory)
@@ -112,7 +112,7 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: initializes module descriptors
+// Purpose: Initializes a module descriptors
 //-----------------------------------------------------------------------------
 void CModule::Init()
 {
@@ -157,7 +157,7 @@ void CModule::Init()
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: initializes the default executable segments
+// Purpose: Initializes the default executable segments
 //-----------------------------------------------------------------------------
 void CModule::LoadSections()
 {
@@ -165,7 +165,7 @@ void CModule::LoadSections()
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: converting a string pattern with wildcards to an array of bytes and mask
+// Purpose: Converts a string pattern with wildcards to an array of bytes and mask
 // Input  : svInput
 // Output : std::pair<std::vector<uint8_t>, std::string>
 //-----------------------------------------------------------------------------
@@ -200,7 +200,7 @@ std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(const
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: find array of bytes in process memory using SIMD instructions
+// Purpose: Finds an array of bytes in process memory using SIMD instructions
 // Input  : *pPattern - first and last byte must be known
 //          szMask
 //          pStartAddress
@@ -279,7 +279,7 @@ CMemory CModule::FindPatternSIMD(const CMemory pPattern, const std::string_view 
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: find a string pattern in process memory using SIMD instructions
+// Purpose: Finds a string pattern in process memory using SIMD instructions
 // Input  : svPattern - first and last byte must be known
 //          pStartAddress
 //			*moduleSection
@@ -292,7 +292,7 @@ CMemory CModule::FindPatternSIMD(const std::string_view svPattern, const CMemory
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: get address of a virtual method table by rtti type descriptor name
+// Purpose: Finds an address of a virtual method table by rtti type descriptor name
 // Input  : svTableName
 //          bDecorated
 // Output : CMemory
@@ -371,7 +371,7 @@ CMemory CModule::FindVirtualTableByName(const std::string_view svTableName, bool
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: get address of a virtual method table by rtti type descriptor name
+// Purpose: Finds an address of a virtual method table by rtti type descriptor name
 // Input  : svFunctionName
 // Output : CMemory
 //-----------------------------------------------------------------------------
@@ -388,7 +388,7 @@ CMemory CModule::FindFunctionByName(const std::string_view svFunctionName) const
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: get the module section by name (example: '.rdata', '.text')
+// Purpose: Gets a module section by name (example: '.rdata', '.text')
 // Input  : svModuleName
 // Output : ModuleSections_t
 //-----------------------------------------------------------------------------
@@ -404,7 +404,7 @@ CModule::ModuleSections_t CModule::GetSectionByName(const std::string_view svSec
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: returns the module base
+// Purpose: Returns the module base
 //-----------------------------------------------------------------------------
 uintptr_t CModule::GetModuleBase() const
 {
@@ -412,7 +412,7 @@ uintptr_t CModule::GetModuleBase() const
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: returns the module name
+// Purpose: Returns the module name
 //-----------------------------------------------------------------------------
 std::string_view CModule::GetModuleName() const
 {
