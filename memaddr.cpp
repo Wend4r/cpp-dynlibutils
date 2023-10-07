@@ -23,7 +23,7 @@ CMemory CMemory::FollowNearCallSelf(const ptrdiff_t opcodeOffset, const ptrdiff_
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: resolves the relative pointer to offset
+// Purpose: Resolves the relative pointer to offset
 // Input  : registerOffset - 
 //			nextInstructionOffset - 
 // Output : CMemory
@@ -44,7 +44,7 @@ CMemory CMemory::ResolveRelativeAddress(const ptrdiff_t registerOffset, const pt
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: resolves the relative pointer to offset from current address
+// Purpose: Resolves the relative pointer to offset from current address
 // Input  : registerOffset - 
 //			nextInstructionOffset - 
 // Output : CMemory
