@@ -6,7 +6,7 @@
 //			nextInstructionOffset - 
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CMemory::FollowNearCall(const ptrdiff_t opcodeOffset, const ptrdiff_t nextInstructionOffset)
+CMemory CMemory::FollowNearCall(const ptrdiff_t opcodeOffset, const ptrdiff_t nextInstructionOffset) const
 {
 	return ResolveRelativeAddress(opcodeOffset, nextInstructionOffset);
 }
@@ -28,7 +28,7 @@ CMemory CMemory::FollowNearCallSelf(const ptrdiff_t opcodeOffset, const ptrdiff_
 //			nextInstructionOffset - 
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CMemory::ResolveRelativeAddress(const ptrdiff_t registerOffset, const ptrdiff_t nextInstructionOffset)
+CMemory CMemory::ResolveRelativeAddress(const ptrdiff_t registerOffset, const ptrdiff_t nextInstructionOffset) const
 {
 	// Skip register.
 	const uintptr_t skipRegister = ptr + registerOffset;
