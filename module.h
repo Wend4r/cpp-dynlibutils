@@ -34,8 +34,8 @@ public:
 	explicit CModule(const std::string& szModuleName) : CModule(std::string_view(szModuleName)) {};
 	CModule(const CMemory pModuleMemory);
 
-	void InitFromName(const std::string_view szModuleName);
-	void InitFromMemory(const CMemory pModuleMemory);
+	bool InitFromName(const std::string_view szModuleName);
+	bool InitFromMemory(const CMemory pModuleMemory);
 
 	static std::pair<std::vector<uint8_t>, std::string> PatternToMaskedBytes(const std::string_view svInput);
 	CMemory FindPatternSIMD(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress = nullptr, const ModuleSections_t* moduleSection = nullptr) const;

@@ -33,7 +33,7 @@ CModule::CModule(const CMemory pModuleMemory)
 // Purpose: initializes class from module name (without extension .dll/.so)
 // Input  : szModuleName
 //-----------------------------------------------------------------------------
-void CModule::InitFromName(const std::string_view szModuleName)
+bool CModule::InitFromName(const std::string_view szModuleName)
 {
 	std::string szFullModuleName(szModuleName);
 
@@ -42,7 +42,7 @@ void CModule::InitFromName(const std::string_view szModuleName)
 
 	m_pModuleBase = reinterpret_cast<uintptr_t>(GetModuleHandleA(szFullModuleName.c_str()));
 	if(!m_pModuleBase)
-		return;
+		return false;
 #else
 	szFullModuleName.append(".so");
 
@@ -65,7 +65,7 @@ void CModule::InitFromName(const std::string_view szModuleName)
 	}, &dldata);
 
 	if(!dldata.addr)
-		return;
+		return false;
 
 	m_pModuleBase = reinterpret_cast<uintptr_t>(dldata.addr);
 #endif
@@ -74,18 +74,20 @@ void CModule::InitFromName(const std::string_view szModuleName)
 
 	Init();
 	LoadSections();
+
+	return true;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: initializes class from module memory
 // Input  : pModuleMemory
 //-----------------------------------------------------------------------------
-void CModule::InitFromMemory(const CMemory pModuleMemory)
+bool CModule::InitFromMemory(const CMemory pModuleMemory)
 {
 #if defined _WIN32 && _M_X64
 	MEMORY_BASIC_INFORMATION mbi;
 	if (!VirtualQuery(pModuleMemory, &mbi, sizeof(mbi)) || mbi.AllocationBase == nullptr)
-		return;
+		return false;
 
 	m_pModuleBase = reinterpret_cast<uintptr_t>(mbi.AllocationBase);
 
@@ -95,7 +97,7 @@ void CModule::InitFromMemory(const CMemory pModuleMemory)
 #else
 	Dl_info info;
 	if (!dladdr(pModuleMemory, &info) || !info.dli_fbase || !info.dli_fname)
-		return;
+		return false;
 
 	m_pModuleBase = reinterpret_cast<uintptr_t>(info.dli_fbase);
 	m_svModuleName.assign(info.dli_fname);
@@ -105,6 +107,8 @@ void CModule::InitFromMemory(const CMemory pModuleMemory)
 
 	Init();
 	LoadSections();
+
+	return true;
 }
 
 //-----------------------------------------------------------------------------
