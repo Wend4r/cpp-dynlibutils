@@ -282,7 +282,7 @@ CMemory CModule::FindPatternSIMD(const CMemory pPattern, const std::string_view 
 // Purpose: Finds a string pattern in process memory using SIMD instructions
 // Input  : svPattern - first and last byte must be known
 //          pStartAddress
-//			*moduleSection
+//          *moduleSection
 // Output : CMemory
 //-----------------------------------------------------------------------------
 CMemory CModule::FindPatternSIMD(const std::string_view svPattern, const CMemory pStartAddress, const ModuleSections_t* moduleSection) const

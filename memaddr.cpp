@@ -3,7 +3,7 @@
 //-----------------------------------------------------------------------------
 // Purpose: ResolveRelativeAddress wrapper
 // Input  : opcodeOffset - 
-//			nextInstructionOffset - 
+//          nextInstructionOffset - 
 // Output : CMemory
 //-----------------------------------------------------------------------------
 CMemory CMemory::FollowNearCall(const ptrdiff_t opcodeOffset, const ptrdiff_t nextInstructionOffset) const
@@ -14,7 +14,7 @@ CMemory CMemory::FollowNearCall(const ptrdiff_t opcodeOffset, const ptrdiff_t ne
 //-----------------------------------------------------------------------------
 // Purpose: ResolveRelativeAddressSelf wrapper
 // Input  : opcodeOffset - 
-//			nextInstructionOffset - 
+//          nextInstructionOffset - 
 // Output : CMemory
 //-----------------------------------------------------------------------------
 CMemory CMemory::FollowNearCallSelf(const ptrdiff_t opcodeOffset, const ptrdiff_t nextInstructionOffset)
@@ -25,7 +25,7 @@ CMemory CMemory::FollowNearCallSelf(const ptrdiff_t opcodeOffset, const ptrdiff_
 //-----------------------------------------------------------------------------
 // Purpose: Resolves the relative pointer to offset
 // Input  : registerOffset - 
-//			nextInstructionOffset - 
+//          nextInstructionOffset - 
 // Output : CMemory
 //-----------------------------------------------------------------------------
 CMemory CMemory::ResolveRelativeAddress(const ptrdiff_t registerOffset, const ptrdiff_t nextInstructionOffset) const
@@ -46,7 +46,7 @@ CMemory CMemory::ResolveRelativeAddress(const ptrdiff_t registerOffset, const pt
 //-----------------------------------------------------------------------------
 // Purpose: Resolves the relative pointer to offset from current address
 // Input  : registerOffset - 
-//			nextInstructionOffset - 
+//          nextInstructionOffset - 
 // Output : CMemory
 //-----------------------------------------------------------------------------
 CMemory CMemory::ResolveRelativeAddressSelf(const ptrdiff_t registerOffset, const ptrdiff_t nextInstructionOffset)
