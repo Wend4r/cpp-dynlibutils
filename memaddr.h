@@ -64,6 +64,19 @@ public:
 		return reinterpret_cast<T>(ptr);
 	}
 
+	template<typename T> inline T FCast() const
+	{
+		union
+		{
+			uintptr_t cptr;
+			T func;
+		} Cast;
+
+		Cast.cptr = ptr;
+
+		return Cast.func;
+	}
+
 	inline CMemory Offset(ptrdiff_t offset) const
 	{
 		return CMemory(ptr + offset);
