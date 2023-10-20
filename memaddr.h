@@ -64,7 +64,7 @@ public:
 		return reinterpret_cast<T>(ptr);
 	}
 
-	template<typename T> inline T FCast() const
+	template<typename T> inline T UCast() const
 	{
 		union
 		{
