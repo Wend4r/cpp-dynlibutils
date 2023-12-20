@@ -1,21 +1,16 @@
+#include "module.h"
+#include "memaddr.h"
+#include <cstring>
 #include <cmath>
 #include <emmintrin.h>
-#include "module.h"
-#if defined _WIN32 && _M_X64
-#include <windows.h>
-#elif defined __linux__ && __x86_64__
-#include <cstring>
-#include <link.h>
-#include <unistd.h>
-#else
-#error "Unsupported platform"
-#endif
+
+using namespace DynLibUtils;
 
 //-----------------------------------------------------------------------------
 // Purpose: constructor
 // Input  : szModuleName (without extension .dll/.so)
 //-----------------------------------------------------------------------------
-CModule::CModule(const std::string_view szModuleName)
+CModule::CModule(const std::string_view szModuleName) : m_pModuleHandle(nullptr)
 {
 	InitFromName(szModuleName);
 }
@@ -24,144 +19,9 @@ CModule::CModule(const std::string_view szModuleName)
 // Purpose: constructor
 // Input  : pModuleMemory
 //-----------------------------------------------------------------------------
-CModule::CModule(const CMemory pModuleMemory)
+CModule::CModule(const CMemory pModuleMemory) : m_pModuleHandle(nullptr)
 {
 	InitFromMemory(pModuleMemory);
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Initializes the module from module name (without extension .dll/.so)
-// Input  : szModuleName
-//-----------------------------------------------------------------------------
-bool CModule::InitFromName(const std::string_view szModuleName)
-{
-	std::string szFullModuleName(szModuleName);
-
-#if defined _WIN32 && _M_X64
-	szFullModuleName.append(".dll");
-
-	m_pModuleBase = reinterpret_cast<uintptr_t>(GetModuleHandleA(szFullModuleName.c_str()));
-	if(!m_pModuleBase)
-		return false;
-#else
-	szFullModuleName.append(".so");
-
-	struct dl_data
-	{
-		ElfW(Addr) addr;
-		const char* moduleName;
-	} dldata{0, szFullModuleName.c_str()};
-
-	dl_iterate_phdr([](dl_phdr_info* info, size_t /* size */, void* data)
-	{
-		dl_data* dldata = reinterpret_cast<dl_data*>(data);
-
-		if (std::strstr(info->dlpi_name, dldata->moduleName) != nullptr)
-		{
-			dldata->addr = info->dlpi_addr;
-		}
-
-		return 0;
-	}, &dldata);
-
-	if(!dldata.addr)
-		return false;
-
-	m_pModuleBase = reinterpret_cast<uintptr_t>(dldata.addr);
-#endif
-
-	m_svModuleName.assign(std::move(szFullModuleName));
-
-	Init();
-	LoadSections();
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Initializes the module from module memory
-// Input  : pModuleMemory
-//-----------------------------------------------------------------------------
-bool CModule::InitFromMemory(const CMemory pModuleMemory)
-{
-#if defined _WIN32 && _M_X64
-	MEMORY_BASIC_INFORMATION mbi;
-	if (!VirtualQuery(pModuleMemory, &mbi, sizeof(mbi)) || mbi.AllocationBase == nullptr)
-		return false;
-
-	m_pModuleBase = reinterpret_cast<uintptr_t>(mbi.AllocationBase);
-
-	char szPath[MAX_PATH];
-	size_t nLen = GetModuleFileNameA(reinterpret_cast<HMODULE>(mbi.AllocationBase), szPath, sizeof(szPath));
-	m_svModuleName.assign(szPath, nLen);
-#else
-	Dl_info info;
-	if (!dladdr(pModuleMemory, &info) || !info.dli_fbase || !info.dli_fname)
-		return false;
-
-	m_pModuleBase = reinterpret_cast<uintptr_t>(info.dli_fbase);
-	m_svModuleName.assign(info.dli_fname);
-#endif
-
-	m_svModuleName.assign(m_svModuleName.substr(m_svModuleName.find_last_of("/\\") + 1)); // Leave only file name.
-
-	Init();
-	LoadSections();
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Initializes a module descriptors
-//-----------------------------------------------------------------------------
-void CModule::Init()
-{
-#if defined _WIN32 && _M_X64
-	IMAGE_DOS_HEADER* pDOSHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(m_pModuleBase);
-	IMAGE_NT_HEADERS64* pNTHeaders = reinterpret_cast<IMAGE_NT_HEADERS64*>(m_pModuleBase + pDOSHeader->e_lfanew);
-
-	const IMAGE_SECTION_HEADER* hSection = IMAGE_FIRST_SECTION(pNTHeaders); // Get first image section.
-
-	for (WORD i = 0; i < pNTHeaders->FileHeader.NumberOfSections; i++) // Loop through the sections.
-	{
-		const IMAGE_SECTION_HEADER& hCurrentSection = hSection[i]; // Get current section.
-		m_vModuleSections.emplace_back(reinterpret_cast<const char*>(hCurrentSection.Name), static_cast<uintptr_t>(m_pModuleBase + hCurrentSection.VirtualAddress), hCurrentSection.SizeOfRawData); // Push back a struct with the section data.
-	}
-#else
-	Elf64_Ehdr* pEhdr = reinterpret_cast<Elf64_Ehdr*>(m_pModuleBase);
-	Elf64_Phdr* pPhdr = reinterpret_cast<Elf64_Phdr*>(m_pModuleBase + pEhdr->e_phoff);
-
-	for (Elf64_Half i = 0; i < pEhdr->e_phnum; i++) // Loop through the sections.
-	{
-		Elf64_Phdr& phdr = pPhdr[i];
-
-		if (phdr.p_type == PT_LOAD && phdr.p_flags == (PF_X | PF_R))
-		{
-			/* From glibc, elf/dl-load.c:
-			 * c->mapend = ((ph->p_vaddr + ph->p_filesz + GLRO(dl_pagesize) - 1)
-			 * & ~(GLRO(dl_pagesize) - 1));
-			 *
-			 * In glibc, the segment file size is aligned up to the nearest page size and
-			 * added to the virtual address of the segment. We just want the size here.
-			 */
-			size_t pagesize = sysconf(_SC_PAGESIZE);
-			size_t nSectionSize = (phdr.p_filesz + pagesize - 1) & ~(pagesize - 1);
-
-			// We can't get the section names, but most likely it will be exactly .text.
-			m_vModuleSections.emplace_back(".text", m_pModuleBase + phdr.p_vaddr, nSectionSize);
-
-			break;
-		}
-	}
-#endif
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Initializes the default executable segments
-//-----------------------------------------------------------------------------
-void CModule::LoadSections()
-{
-	m_ExecutableCode = GetSectionByName(".text");
 }
 
 //-----------------------------------------------------------------------------
@@ -201,16 +61,16 @@ std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(const
 
 //-----------------------------------------------------------------------------
 // Purpose: Finds an array of bytes in process memory using SIMD instructions
-// Input  : *pPattern - first and last byte must be known
+// Input  : *pPattern
 //          szMask
 //          pStartAddress
-//          *moduleSection
+//          *pModuleSection
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::FindPatternSIMD(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress, const ModuleSections_t* moduleSection) const
+CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress, const ModuleSections_t* pModuleSection) const
 {
 	const uint8_t* pattern = pPattern.RCast<const uint8_t*>();
-	const ModuleSections_t* section = moduleSection ? moduleSection : &m_ExecutableCode;
+	const ModuleSections_t* section = pModuleSection ? pModuleSection : &m_ExecutableCode;
 	if (!section->IsSectionValid())
 		return CMemory();
 
@@ -234,7 +94,7 @@ CMemory CModule::FindPatternSIMD(const CMemory pPattern, const std::string_view 
 	const uint8_t iNumMasks = static_cast<uint8_t>(std::ceil(static_cast<float>(nMaskLen) / 16.f));
 
 	memset(nMasks, 0, iNumMasks * sizeof(int));
-	for (uint8_t i = 0; i < iNumMasks; i++)
+	for (uint8_t i = 0; i < iNumMasks; ++i)
 	{
 		for (int8_t j = static_cast<int8_t>(std::min<size_t>(nMaskLen - i * 16, 16)) - 1; j >= 0; --j)
 		{
@@ -249,29 +109,25 @@ CMemory CModule::FindPatternSIMD(const CMemory pPattern, const std::string_view 
 	__m128i xmm2, xmm3, msks;
 	for (; pData != pEnd; _mm_prefetch(reinterpret_cast<const char*>(++pData + 64), _MM_HINT_NTA))
 	{
-		if (pattern[0] == pData[0] && pattern[nMaskLen - 1] == pData[nMaskLen - 1])
+		xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData));
+		msks = _mm_cmpeq_epi8(xmm1, xmm2);
+		if ((_mm_movemask_epi8(msks) & nMasks[0]) == nMasks[0])
 		{
-			xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData));
-			msks = _mm_cmpeq_epi8(xmm1, xmm2);
-			if ((_mm_movemask_epi8(msks) & nMasks[0]) == nMasks[0])
+			bool bFound = true;
+			for (uint8_t i = 1; i < iNumMasks; ++i)
 			{
-				bool bFound = true;
-				for (uint8_t i = 1; i < iNumMasks; i++)
+				xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pData + i * 16)));
+				xmm3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pattern + i * 16)));
+				msks = _mm_cmpeq_epi8(xmm2, xmm3);
+				if ((_mm_movemask_epi8(msks) & nMasks[i]) != nMasks[i])
 				{
-					xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pData + i * 16)));
-					xmm3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pattern + i * 16)));
-					msks = _mm_cmpeq_epi8(xmm2, xmm3);
-					if ((_mm_movemask_epi8(msks) & nMasks[i]) != nMasks[i])
-					{
-						bFound = false;
-						break;
-					}
-				}
-				if (bFound)
-				{
-					return static_cast<CMemory>((&*(const_cast<uint8_t*>(pData))));
+					bFound = false;
+					break;
 				}
 			}
+
+			if (bFound)
+				return pData;
 		}
 	}
 
@@ -280,111 +136,15 @@ CMemory CModule::FindPatternSIMD(const CMemory pPattern, const std::string_view 
 
 //-----------------------------------------------------------------------------
 // Purpose: Finds a string pattern in process memory using SIMD instructions
-// Input  : svPattern - first and last byte must be known
+// Input  : svPattern
 //          pStartAddress
-//          *moduleSection
+//          *pModuleSection
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::FindPatternSIMD(const std::string_view svPattern, const CMemory pStartAddress, const ModuleSections_t* moduleSection) const
+CMemory CModule::FindPattern(const std::string_view svPattern, const CMemory pStartAddress, const ModuleSections_t* pModuleSection) const
 {
 	const std::pair patternInfo = PatternToMaskedBytes(svPattern);
-	return FindPatternSIMD(patternInfo.first.data(), patternInfo.second, pStartAddress, moduleSection);
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Finds an address of a virtual method table by rtti type descriptor name
-// Input  : svTableName
-//          bDecorated
-// Output : CMemory
-//-----------------------------------------------------------------------------
-CMemory CModule::FindVirtualTableByName(const std::string_view svTableName, bool bDecorated) const
-{
-	if (!m_ExecutableCode.IsSectionValid())
-		return CMemory();
-
-	std::string szDecoratedTableName;
-	if (bDecorated)
-	{
-		szDecoratedTableName.assign(svTableName);
-	}
-	else
-	{
-#if defined _WIN32 && _M_X64
-		szDecoratedTableName.assign(".?AV" + std::string(svTableName) + "@@");
-#else
-		szDecoratedTableName.assign(std::to_string(svTableName.length()) + std::string(svTableName));
-#endif
-	}
-
-	std::string szMask(szDecoratedTableName.length() + 1, 'x');
-
-#if defined _WIN32 && _M_X64
-	CModule::ModuleSections_t runTimeData = GetSectionByName(".data");
-	CMemory typeDescriptorName = FindPatternSIMD(szDecoratedTableName.data(), szMask, nullptr, &runTimeData);
-	if (!typeDescriptorName)
-		return CMemory();
-	
-	CModule::ModuleSections_t readOnlyData = GetSectionByName(".rdata");
-	
-	CMemory rttiTypeDescriptor = typeDescriptorName.Offset(-0x10);
-	const uintptr_t rttiTDRva = rttiTypeDescriptor.GetPtr() - m_pModuleBase; // The RTTI gets referenced by a 4-Byte RVA address. We need to scan for that address.
-	
-	CMemory reference;
-	while ((reference = FindPatternSIMD(&rttiTDRva, "xxxx", reference, &readOnlyData))) // Get reference typeinfo in vtable
-	{
-		// Check if we got a RTTI Object Locator for this reference by checking if -0xC is 1, which is the 'signature' field which is always 1 on x64.
-		// Check that offset of this vtable is 0
-		if (reference.Offset(-0xC).GetValue<int32_t>() == 1 && reference.Offset(-0x8).GetValue<int32_t>() == 0)
-		{
-			CMemory referenceOffset = reference.Offset(-0xC);
-			CMemory rttiCompleteObjectLocator = FindPatternSIMD(referenceOffset, "xxxxxxxx", nullptr, &readOnlyData);
-			if(rttiCompleteObjectLocator)
-				return rttiCompleteObjectLocator.Offset(0x8);
-		}
-	
-		reference.OffsetSelf(0x4);
-	}
-#else
-	CMemory typeInfoName = FindPatternSIMD(szDecoratedTableName.data(), szMask);
-	if(!typeInfoName)
-		return CMemory();
-
-	CMemory referenceTypeName = FindPatternSIMD(typeInfoName, "xxxxxxxx"); // Get reference to type name.
-	if(!referenceTypeName)
-		return CMemory();
-
-	CMemory typeInfo = referenceTypeName.Offset(-0x8); // Offset -0x8 to typeinfo.
-
-	CMemory reference;
-	while((reference = FindPatternSIMD(typeInfo, "xxxxxxxx", reference))) // Get reference typeinfo in vtable
-	{
-		if(reference.Offset(-0x8).GetValue<int64_t>() == 0) // Offset to this.
-		{
-			return reference.Offset(0x8);
-		}
-
-		reference.OffsetSelf(0x8);
-	}
-#endif
-
-	return CMemory();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Finds an address of a virtual method table by rtti type descriptor name
-// Input  : svFunctionName
-// Output : CMemory
-//-----------------------------------------------------------------------------
-CMemory CModule::FindFunctionByName(const std::string_view svFunctionName) const
-{
-	if(!m_pModuleBase)
-		return CMemory();
-
-#if defined _WIN32 && _M_X64
-	return GetProcAddress(reinterpret_cast<HMODULE>(m_pModuleBase), svFunctionName.data());
-#else
-	return dlsym(reinterpret_cast<void*>(m_pModuleBase), svFunctionName.data());
-#endif
+	return FindPattern(patternInfo.first.data(), patternInfo.second, pStartAddress, pModuleSection);
 }
 
 //-----------------------------------------------------------------------------
@@ -404,11 +164,19 @@ CModule::ModuleSections_t CModule::GetSectionByName(const std::string_view svSec
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Returns the module base
+// Purpose: Returns the module handle
 //-----------------------------------------------------------------------------
-uintptr_t CModule::GetModuleBase() const
+void* CModule::GetModuleHandle() const noexcept
 {
-	return m_pModuleBase;
+	return m_pModuleHandle;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Returns the module path
+//-----------------------------------------------------------------------------
+std::string_view CModule::GetModulePath() const
+{
+	return m_sModulePath;
 }
 
 //-----------------------------------------------------------------------------
@@ -416,5 +184,16 @@ uintptr_t CModule::GetModuleBase() const
 //-----------------------------------------------------------------------------
 std::string_view CModule::GetModuleName() const
 {
-	return m_svModuleName;
+	std::string_view svModulePath(m_sModulePath);
+	return svModulePath.substr(svModulePath.find_last_of("/\\") + 1);
 }
+
+#ifndef DYNLIBUTILS_SEPARATE_SOURCE_FILES
+	#if defined _WIN32 && _M_X64
+		#include "module_windows.cpp"
+	#elif defined __linux__ && __x86_64__
+		#include "module_linux.cpp"
+	#else
+		#error "Unsupported platform"
+	#endif
+#endif
