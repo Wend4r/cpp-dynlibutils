@@ -1,96 +1,90 @@
-#ifndef MEMADDR_H
-#define MEMADDR_H
+#ifndef DYNLIBUTILS_MEMADDR_H
+#define DYNLIBUTILS_MEMADDR_H
 #ifdef _WIN32
 #pragma once
 #endif
 
 #include <cstdint>
-#include <stddef.h>
+#include <cstddef>
+
+namespace DynLibUtils {
 
 class CMemory
 {
 public:
-	CMemory() = default;
-	CMemory(const uintptr_t ptr) : ptr(ptr) {}
-	CMemory(const void* ptr) : ptr(uintptr_t(ptr)) {}
+	CMemory(const uintptr_t ptr = 0) : m_ptr(ptr) {}
+	CMemory(const void* ptr) : m_ptr(reinterpret_cast<uintptr_t>(ptr)) {}
 
-	inline operator uintptr_t() const
+	inline operator uintptr_t() const noexcept
 	{
-		return ptr;
+		return m_ptr;
 	}
 
-	inline operator void*() const
+	inline operator void*() const noexcept
 	{
-		return reinterpret_cast<void*>(ptr);
+		return reinterpret_cast<void*>(m_ptr);
 	}
 
-	inline operator bool() const
+	explicit inline operator bool() const noexcept
 	{
-		return ptr != 0;
+		return m_ptr != 0;
 	}
 
-	inline bool operator!= (const CMemory& addr) const
+	inline bool operator!= (const CMemory& addr) const noexcept
 	{
-		return ptr != addr.ptr;
+		return m_ptr != addr.m_ptr;
 	}
 
-	inline bool operator== (const CMemory& addr) const
+	inline bool operator== (const CMemory& addr) const noexcept
 	{
-		return ptr == addr.ptr;
+		return m_ptr == addr.m_ptr;
 	}
 
-	inline bool operator== (const uintptr_t& addr) const
+	inline bool operator== (const uintptr_t& addr) const noexcept
 	{
-		return ptr == addr;
+		return m_ptr == addr;
 	}
 
-	inline uintptr_t GetPtr() const
+	[[nodiscard]] inline uintptr_t GetPtr() const noexcept
 	{
-		return ptr;
+		return m_ptr;
 	}
 
-	template<class T> inline T GetValue() const
+	template<class T> [[nodiscard]] inline T GetValue() const noexcept
 	{
-		return *reinterpret_cast<T*>(ptr);
+		return *reinterpret_cast<T*>(m_ptr);
 	}
 
-	template<typename T> inline T CCast() const
+	template<typename T> [[nodiscard]] inline T CCast() const noexcept
 	{
-		return (T)ptr;
+		return (T)m_ptr;
 	}
 
-	template<typename T> inline T RCast() const
+	template<typename T> [[nodiscard]] inline T RCast() const noexcept
 	{
-		return reinterpret_cast<T>(ptr);
+		return reinterpret_cast<T>(m_ptr);
 	}
 
-	template<typename T> inline T UCast() const
+	template<typename T> [[nodiscard]] inline T UCast() const noexcept
 	{
-		union
-		{
-			uintptr_t cptr;
-			T func;
-		} Cast;
-
-		Cast.cptr = ptr;
-
-		return Cast.func;
+		union { uintptr_t m_ptr; T cptr; } cast;
+		return cast.m_ptr = m_ptr, cast.cptr;
 	}
 
-	inline CMemory Offset(ptrdiff_t offset) const
+	[[nodiscard]] inline CMemory Offset(ptrdiff_t offset) const noexcept
 	{
-		return CMemory(ptr + offset);
+		return m_ptr + offset;
 	}
 
-	inline CMemory OffsetSelf(ptrdiff_t offset)
+	inline CMemory& OffsetSelf(ptrdiff_t offset) noexcept
 	{
-		ptr += offset;
+		m_ptr += offset;
 		return *this;
 	}
 
-	inline CMemory Deref(int deref = 1) const
+	[[nodiscard]] inline CMemory Deref(int deref = 1) const
 	{
-		uintptr_t reference = ptr;
+		uintptr_t reference = m_ptr;
 
 		while (deref--)
 		{
@@ -98,27 +92,52 @@ public:
 				reference = *reinterpret_cast<uintptr_t*>(reference);
 		}
 
-		return CMemory(reference);
+		return reference;
 	}
 
-	inline CMemory DerefSelf(int deref = 1)
+	inline CMemory& DerefSelf(int deref = 1)
 	{
 		while (deref--)
 		{
-			if (ptr)
-				ptr = *reinterpret_cast<uintptr_t*>(ptr);
+			if (m_ptr)
+				m_ptr = *reinterpret_cast<uintptr_t*>(m_ptr);
 		}
 
 		return *this;
 	}
 
-	CMemory FollowNearCall(const ptrdiff_t opcodeOffset = 0x1, const ptrdiff_t nextInstructionOffset = 0x5) const;
-	CMemory FollowNearCallSelf(const ptrdiff_t opcodeOffset = 0x1, const ptrdiff_t nextInstructionOffset = 0x5);
-	CMemory ResolveRelativeAddress(const ptrdiff_t registerOffset = 0x0, const ptrdiff_t nextInstructionOffset = 0x4) const;
-	CMemory ResolveRelativeAddressSelf(const ptrdiff_t registerOffset = 0x0, const ptrdiff_t nextInstructionOffset = 0x4);
+	[[nodiscard]] inline CMemory FollowNearCall(const ptrdiff_t opcodeOffset = 0x1, const ptrdiff_t nextInstructionOffset = 0x5) const
+	{
+		return ResolveRelativeAddress(opcodeOffset, nextInstructionOffset);
+	}
+
+	inline CMemory& FollowNearCallSelf(const ptrdiff_t opcodeOffset = 0x1, const ptrdiff_t nextInstructionOffset = 0x5)
+	{
+		return ResolveRelativeAddressSelf(opcodeOffset, nextInstructionOffset);
+	}
+
+	[[nodiscard]] inline CMemory ResolveRelativeAddress(const ptrdiff_t registerOffset = 0x0, const ptrdiff_t nextInstructionOffset = 0x4) const
+	{
+		const uintptr_t skipRegister = m_ptr + registerOffset;
+		const int32_t relativeAddress = *reinterpret_cast<int32_t*>(skipRegister);
+		const uintptr_t nextInstruction = m_ptr + nextInstructionOffset;
+		return nextInstruction + relativeAddress;
+	}
+
+	inline CMemory& ResolveRelativeAddressSelf(const ptrdiff_t registerOffset = 0x0, const ptrdiff_t nextInstructionOffset = 0x4)
+	{
+		const uintptr_t skipRegister = m_ptr + registerOffset;
+		const int32_t relativeAddress = *reinterpret_cast<int32_t*>(skipRegister);
+		const uintptr_t nextInstruction = m_ptr + nextInstructionOffset;
+		m_ptr = nextInstruction + relativeAddress;
+
+		return *this;
+	}
 
 private:
-	uintptr_t ptr = 0;
+	uintptr_t m_ptr = 0;
 };
 
-#endif // MEMADDR_H
+} // namespace DynLibUtils
+
+#endif // DYNLIBUTILS_MEMADDR_H
