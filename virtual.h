@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+namespace DynLibUtils {
+
 class VirtualTable
 {
 public:
@@ -21,5 +23,7 @@ public:
 		return this->GetMethod<T (*)(VirtualTable *, Args...)>(nIndex)(this, args...);
 	}
 };
+
+} // namespace DynLibUtils
 
 #endif // VIRTUAL_H
