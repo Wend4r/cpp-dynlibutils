@@ -1,5 +1,5 @@
-#ifndef VIRTUAL_H
-#define VIRTUAL_H
+#ifndef DYNLIBUTILS_VIRTUAL_HPP
+#define DYNLIBUTILS_VIRTUAL_HPP
 #ifdef _WIN32
 #pragma once
 #endif
@@ -26,4 +26,4 @@ public:
 
 } // namespace DynLibUtils
 
-#endif // VIRTUAL_H
+#endif // DYNLIBUTILS_VIRTUAL_HPP
