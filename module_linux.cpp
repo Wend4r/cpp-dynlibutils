@@ -1,5 +1,6 @@
-#include "module.h"
-#include "memaddr.h"
+#include "module.hpp"
+#include "memaddr.hpp"
+
 #include <cstring>
 #include <link.h>
 #include <unistd.h>

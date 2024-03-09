@@ -4,7 +4,8 @@
 #pragma once
 #endif
 
-#include "memaddr.h"
+#include "memaddr.hpp"
+
 #include <vector>
 #include <string>
 #include <string_view>
