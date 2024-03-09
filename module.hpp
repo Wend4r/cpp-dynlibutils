@@ -1,5 +1,5 @@
-#ifndef DYNLIBUTILS_MODULE_H
-#define DYNLIBUTILS_MODULE_H
+#ifndef DYNLIBUTILS_MODULE_HPP
+#define DYNLIBUTILS_MODULE_HPP
 #ifdef _WIN32
 #pragma once
 #endif
@@ -67,4 +67,4 @@ private:
 
 } // namespace DynLibUtils
 
-#endif // DYNLIBUTILS_MODULE_H
+#endif // DYNLIBUTILS_MODULE_HPP
