@@ -1,5 +1,5 @@
-#ifndef DYNLIBUTILS_MEMADDR_H
-#define DYNLIBUTILS_MEMADDR_H
+#ifndef DYNLIBUTILS_MEMADDR_HPP
+#define DYNLIBUTILS_MEMADDR_HPP
 #ifdef _WIN32
 #pragma once
 #endif
@@ -140,4 +140,4 @@ private:
 
 } // namespace DynLibUtils
 
-#endif // DYNLIBUTILS_MEMADDR_H
+#endif // DYNLIBUTILS_MEMADDR_HPP
