@@ -11,6 +11,9 @@ project(memory_utils
 	LANGUAGES C CXX
 )
 
+set(INCLUDE_DIR "include")
+set(SOURCE_DIR "src")
+
 include("cmake/platform/shared.cmake")
 
 if(LINUX)
@@ -19,8 +22,21 @@ elseif(WINDOWS)
 	include("cmake/platform/windows.cmake")
 endif()
 
-set(SOURCE_FILES
-	module.cpp
+add_definitions(
+	-DDYNLIBUTILS_SEPARATE_SOURCE_FILES
 )
 
+set(SOURCE_FILES
+	${SOURCE_DIR}/module.cpp
+)
+
+if(LINUX)
+	list(APPEND SOURCE_FILES ${SOURCE_DIR}/module_linux.cpp)
+elseif(WINDOWS)
+	list(APPEND SOURCE_FILES ${SOURCE_DIR}/module_windows.cpp)
+else()
+	message(FATAL_ERROR "Unsupported platform")
+endif()
+
 add_library(${PROJECT_NAME} STATIC ${SOURCE_FILES})
+target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIR})
