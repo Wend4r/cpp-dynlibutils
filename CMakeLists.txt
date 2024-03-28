@@ -39,4 +39,6 @@ else()
 endif()
 
 add_library(${PROJECT_NAME} STATIC ${SOURCE_FILES})
+target_compile_options(${PROJECT_NAME} PRIVATE ${COMPILER_OPTIONS})
+target_link_options(${PROJECT_NAME} PRIVATE ${LINKER_OPTIONS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIR})
