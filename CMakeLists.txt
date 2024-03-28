@@ -22,7 +22,8 @@ elseif(WINDOWS)
 	include("cmake/platform/windows.cmake")
 endif()
 
-add_definitions(
+set(COMPILE_DEFINITIONS
+	${COMPILE_DEFINITIONS}
 	-DDYNLIBUTILS_SEPARATE_SOURCE_FILES
 )
 
@@ -51,4 +52,5 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_EXTENSIONS OFF)
 target_compile_options(${PROJECT_NAME} PRIVATE ${COMPILER_OPTIONS})
 target_link_options(${PROJECT_NAME} PRIVATE ${LINKER_OPTIONS})
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE ${COMPILE_DEFINITIONS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIR})
