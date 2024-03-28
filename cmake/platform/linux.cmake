@@ -10,6 +10,8 @@ set(COMPILER_OPTIONS
 	-fno-threadsafe-statics -fvisibility=default
 )
 
+set(LINKER_OPTIONS)
+
 include(CheckCCompilerFlag)
 
 check_c_compiler_flag("-fPIC" COMPILER_SUPPORTS_FPIC)
@@ -20,8 +22,3 @@ if(COMPILER_SUPPORTS_FPIC)
 		-fPIC
 	)
 endif()
-
-set(LINKER_OPTIONS
-	${LINKER_OPTIONS}
-	// ...
-)
