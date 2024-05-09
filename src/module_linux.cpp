@@ -1,5 +1,5 @@
-#include "module.hpp"
-#include "memaddr.hpp"
+#include <dynlibutils/module.hpp>
+#include <dynlibutils/memaddr.hpp>
 
 #include <cstring>
 #include <link.h>
