@@ -1,3 +1,7 @@
+// DynLibUtils
+// Copyright (C) 2023 komashchenko (Phoenix)
+// Licensed under the MIT license. See LICENSE file in the project root for details.
+
 #include <dynlibutils/module.hpp>
 #include <dynlibutils/memaddr.hpp>
 

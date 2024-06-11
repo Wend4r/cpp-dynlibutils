@@ -1,3 +1,7 @@
+// DynLibUtils
+// Copyright (C) 2023 komashchenko (Phoenix)
+// Licensed under the MIT license. See LICENSE file in the project root for details.
+
 #ifndef DYNLIBUTILS_MEMADDR_HPP
 #define DYNLIBUTILS_MEMADDR_HPP
 #ifdef _WIN32
