@@ -62,5 +62,6 @@ jobs:
       with:
         name: ${{ runner.os }}-${{ matrix.c_compiler }}
         path: |
+          build/*.a
           build/*.so
           build/${{ matrix.build_type }}/*
