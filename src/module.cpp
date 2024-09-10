@@ -198,6 +198,8 @@ std::string_view CModule::GetModuleName() const
 		#include "module_windows.cpp"
 	#elif defined __linux__ && __x86_64__
 		#include "module_linux.cpp"
+	#elif defined __APPLE__ && __x86_64__
+		#include "module_apple.cpp"
 	#else
 		#error "Unsupported platform"
 	#endif
