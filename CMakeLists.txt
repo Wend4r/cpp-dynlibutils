@@ -30,12 +30,14 @@ set(EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
 set(INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 set(SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
-include("cmake/platform/shared.cmake")
+include(cmake/platform/shared.cmake)
 
-if(LINUX)
-	include("cmake/platform/linux.cmake")
-elseif(WINDOWS)
-	include("cmake/platform/windows.cmake")
+if(WINDOWS)
+	include(cmake/platform/windows.cmake)
+elseif(LINUX)
+	include(cmake/platform/linux.cmake)
+elseif(MACOS)
+	include(cmake/platform/macos.cmake)
 endif()
 
 set(COMPILE_DEFINITIONS
@@ -46,30 +48,44 @@ set(SOURCE_FILES
 	${SOURCE_DIR}/module.cpp
 )
 
+set(INCLUDE_DIRS
+	${INCLUDE_DIR}
+)
+
 if(LINUX)
 	list(APPEND SOURCE_FILES ${SOURCE_DIR}/module_linux.cpp)
 elseif(WINDOWS)
 	list(APPEND SOURCE_FILES ${SOURCE_DIR}/module_windows.cpp)
+elseif(MACOS)
+	message(WARNING "TODO: make module_osx.cpp")
 else()
 	message(FATAL_ERROR "Unsupported platform")
 endif()
 
 add_library(${PROJECT_NAME} STATIC ${SOURCE_FILES})
 
-set_property(TARGET ${PROJECT_NAME} PROPERTY C_STANDARD 17)
-set_property(TARGET ${PROJECT_NAME} PROPERTY C_STANDARD_REQUIRED ON)
-set_property(TARGET ${PROJECT_NAME} PROPERTY C_EXTENSIONS OFF)
+set_target_properties(${PROJECT_NAME} PROPERTIES
+	C_STANDARD 17
+	C_STANDARD_REQUIRED ON
+	C_EXTENSIONS OFF
 
-set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
-set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD_REQUIRED ON)
-set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_EXTENSIONS OFF)
+	CXX_STANDARD 17
+	CXX_STANDARD_REQUIRED ON
+	CXX_EXTENSIONS OFF
+)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME ${PROJECT_OUTPUT_NAME})
 
-target_compile_options(${PROJECT_NAME} PRIVATE ${COMPILE_OPTIONS} ${PLATFORM_COMPILER_OPTIONS})
+if(WINDOWS)
+	set_target_properties(${PROJECT_NAME} PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+elseif(MACOS)
+	set_target_properties(${PROJECT_NAME} PROPERTIES OSX_ARCHITECTURES "x86_64")
+endif()
+
+target_compile_options(${PROJECT_NAME} PRIVATE ${COMPILE_OPTIONS} ${PLATFORM_COMPILE_OPTIONS})
 target_link_options(${PROJECT_NAME} PRIVATE ${LINKER_OPTIONS} ${PLATFORM_LINKER_OPTIONS})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${COMPILE_DEFINITIONS} ${PLATFORM_COMPILE_DEFINITIONS})
-target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIR})
+target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIRS})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LINK_LIBRARIES})
