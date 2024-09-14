@@ -1,3 +1,7 @@
+# DynLibUtils
+# Copyright (C) 2023-2024 komashchenko & Wend4r
+# Licensed under the GPLv3 license. See LICENSE file in the project root for details.
+
 if(UNIX)
 	if(APPLE)
 		set(MACOS TRUE)

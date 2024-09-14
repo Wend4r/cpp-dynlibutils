@@ -1,5 +1,5 @@
-# Logger
-# Copyright (C) 2023-2024 Wend4r
+# DynLibUtils
+# Copyright (C) 2023-2024 komashchenko & Wend4r
 # Licensed under the GPLv3 license. See LICENSE file in the project root for details.
 
 set(PLATFORM_COMPILE_OPTIONS
