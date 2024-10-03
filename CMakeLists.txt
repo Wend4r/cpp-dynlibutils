@@ -86,6 +86,6 @@ target_compile_options(${PROJECT_NAME} PRIVATE ${COMPILE_OPTIONS} ${PLATFORM_COM
 target_link_options(${PROJECT_NAME} PRIVATE ${LINKER_OPTIONS} ${PLATFORM_LINKER_OPTIONS})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${COMPILE_DEFINITIONS} ${PLATFORM_COMPILE_DEFINITIONS})
-target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIRS})
+target_include_directories(${PROJECT_NAME} PUBLIC ${INCLUDE_DIRS})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LINK_LIBRARIES})
