@@ -50,6 +50,8 @@ public:
 	explicit CModule(const std::string& sModuleName) : CModule(std::string_view(sModuleName)) {}
 	CModule(const CMemory pModuleMemory);
 
+	bool LoadFromPath(const std::string_view svModelePath, int flags);
+
 	bool InitFromName(const std::string_view svModuleName, bool bExtension = false);
 	bool InitFromMemory(const CMemory pModuleMemory);
 
@@ -67,8 +69,6 @@ public:
 	[[nodiscard]] std::string_view GetModuleName() const;
 
 private:
-	bool Init(const std::string_view svModelePath);
-
 	ModuleSections_t m_ExecutableCode;
 	std::string m_sModulePath;
 	void* m_pModuleHandle;

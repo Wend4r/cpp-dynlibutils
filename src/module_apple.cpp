@@ -85,7 +85,7 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 	if (!dladdr(pModuleMemory, &info) || !info.dli_fbase || !info.dli_fname)
 		return false;
 
-	if (!Init(info.dli_fname))
+	if (!LoadFromPath(info.dli_fname, RTLD_LAZY))
 		return false;
 
 	return true;
@@ -94,9 +94,9 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 //-----------------------------------------------------------------------------
 // Purpose: Initializes a module descriptors
 //-----------------------------------------------------------------------------
-bool CModule::Init(const std::string_view svModelePath)
+bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 {
-	void* handle = dlopen(svModelePath.data(), RTLD_LAZY);
+	void* handle = dlopen(svModelePath.data(), flags);
 
 	if (!handle) {
 		return false;

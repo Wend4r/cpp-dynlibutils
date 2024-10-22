@@ -70,7 +70,7 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 	if(modulePath.empty())
 		return false;
 
-	if (!Init(modulePath))
+	if (!LoadFromPath(modulePath, DONT_RESOLVE_DLL_REFERENCES))
 		return false;
 
 	return true;
@@ -97,7 +97,7 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 	if (modulePath.empty())
 		return false;
 
-	if (!Init(modulePath))
+	if (!LoadFromPath(modulePath, DONT_RESOLVE_DLL_REFERENCES))
 		return false;
 
 	return true;
@@ -106,9 +106,9 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 //-----------------------------------------------------------------------------
 // Purpose: Initializes a module descriptors
 //-----------------------------------------------------------------------------
-bool CModule::Init(const std::string_view svModelePath)
+bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 {
-	HMODULE handle = LoadLibraryExA(svModelePath.data(), nullptr, DONT_RESOLVE_DLL_REFERENCES);
+	HMODULE handle = LoadLibraryExA(svModelePath.data(), nullptr, flags);
 	if (!handle)
 		return false;
 
