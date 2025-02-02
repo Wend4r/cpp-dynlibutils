@@ -34,11 +34,6 @@ public:
 		return reinterpret_cast<void*>(m_ptr);
 	}
 
-	explicit inline operator bool() const noexcept
-	{
-		return m_ptr != 0;
-	}
-
 	inline bool operator!= (const CMemory& addr) const noexcept
 	{
 		return m_ptr != addr.m_ptr;
