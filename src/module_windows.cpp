@@ -16,11 +16,11 @@ using namespace DynLibUtils;
 
 CModule::~CModule()
 {
-	if (m_pModuleHandle)
-		FreeLibrary(reinterpret_cast<HMODULE>(m_pModuleHandle));
+	if (m_pHandle)
+		FreeLibrary(reinterpret_cast<HMODULE>(m_pHandle));
 }
 
-static std::string GetModulePath(HMODULE hModule)
+static std::string GetPath(HMODULE hModule)
 {
 	std::string modulePath(MAX_PATH, '\0');
 	while (true)
@@ -52,7 +52,7 @@ static std::string GetModulePath(HMODULE hModule)
 //-----------------------------------------------------------------------------
 bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 {
-	if (m_pModuleHandle)
+	if (m_pHandle)
 		return false;
 
 	if (svModuleName.empty())
@@ -66,7 +66,7 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 	if (!handle)
 		return false;
 
-	std::string modulePath = ::GetModulePath(handle);
+	std::string modulePath = ::GetPath(handle);
 	if(modulePath.empty())
 		return false;
 
@@ -83,7 +83,7 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 //-----------------------------------------------------------------------------
 bool CModule::InitFromMemory(const CMemory pModuleMemory)
 {
-	if (m_pModuleHandle)
+	if (m_pHandle)
 		return false;
 
 	if (!pModuleMemory)
@@ -93,7 +93,7 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 	if (!VirtualQuery(pModuleMemory, &mbi, sizeof(mbi)))
 		return false;
 
-	std::string modulePath = ::GetModulePath(reinterpret_cast<HMODULE>(mbi.AllocationBase));
+	std::string modulePath = ::GetPath(reinterpret_cast<HMODULE>(mbi.AllocationBase));
 	if (modulePath.empty())
 		return false;
 
@@ -123,8 +123,8 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 		m_vModuleSections.emplace_back(reinterpret_cast<const char*>(hCurrentSection.Name), static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(handle) + hCurrentSection.VirtualAddress), hCurrentSection.SizeOfRawData); // Push back a struct with the section data.
 	}
 
-	m_pModuleHandle = handle;
-	m_sModulePath.assign(svModelePath);
+	m_pHandle = handle;
+	m_sPath.assign(svModelePath);
 
 	m_ExecutableCode = GetSectionByName(".text");
 
@@ -154,7 +154,7 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 		return CMemory();
 
 	CMemory rttiTypeDescriptor = typeDescriptorName.Offset(-0x10);
-	const uintptr_t rttiTDRva = rttiTypeDescriptor - GetModuleBase(); // The RTTI gets referenced by a 4-Byte RVA address. We need to scan for that address.
+	const uintptr_t rttiTDRva = rttiTypeDescriptor - GetBase(); // The RTTI gets referenced by a 4-Byte RVA address. We need to scan for that address.
 
 	CMemory reference;
 	while ((reference = FindPattern(&rttiTDRva, "xxxx", reference, &readOnlyData))) // Get reference typeinfo in vtable
@@ -182,19 +182,19 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const noexcept
 {
-	if(!m_pModuleHandle)
+	if(!m_pHandle)
 		return CMemory();
 
 	if (svFunctionName.empty())
 		return CMemory();
 
-	return GetProcAddress(reinterpret_cast<HMODULE>(m_pModuleHandle), svFunctionName.data());
+	return GetProcAddress(reinterpret_cast<HMODULE>(m_pHandle), svFunctionName.data());
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Returns the module base
 //-----------------------------------------------------------------------------
-CMemory CModule::GetModuleBase() const noexcept
+CMemory CModule::GetBase() const noexcept
 {
-	return m_pModuleHandle;
+	return m_pHandle;
 }

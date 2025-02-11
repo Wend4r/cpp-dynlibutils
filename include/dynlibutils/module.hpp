@@ -40,11 +40,11 @@ public:
 		size_t m_nSectionSize;       // Size of section.
 	};
 
-	CModule() : m_pModuleHandle(nullptr) {}
+	CModule() : m_pHandle(nullptr) {}
 	~CModule();
 	CModule (const CModule&) = delete;
 	CModule& operator= (const CModule&) = delete;
-	CModule(CModule&& other) noexcept : m_ExecutableCode(std::move(other.m_ExecutableCode)), m_sModulePath(std::move(other.m_sModulePath)), m_pModuleHandle(std::exchange(other.m_pModuleHandle, nullptr)), m_vModuleSections(std::move(other.m_vModuleSections)) {}
+	CModule(CModule&& other) noexcept : m_ExecutableCode(std::move(other.m_ExecutableCode)), m_sPath(std::move(other.m_sPath)), m_pHandle(std::exchange(other.m_pHandle, nullptr)), m_vModuleSections(std::move(other.m_vModuleSections)) {}
 	explicit CModule(const std::string_view svModuleName);
 	explicit CModule(const char* pszModuleName) : CModule(std::string_view(pszModuleName)) {}
 	explicit CModule(const std::string& sModuleName) : CModule(std::string_view(sModuleName)) {}
@@ -63,15 +63,15 @@ public:
 	[[nodiscard]] CMemory GetFunctionByName(const std::string_view svFunctionName) const noexcept;
 
 	[[nodiscard]] ModuleSections_t GetSectionByName(const std::string_view svSectionName) const;
-	[[nodiscard]] void* GetModuleHandle() const noexcept;
-	[[nodiscard]] CMemory GetModuleBase() const noexcept;
-	[[nodiscard]] std::string_view GetModulePath() const;
-	[[nodiscard]] std::string_view GetModuleName() const;
+	[[nodiscard]] void* GetHandle() const noexcept;
+	[[nodiscard]] CMemory GetBase() const noexcept;
+	[[nodiscard]] std::string_view GetPath() const;
+	[[nodiscard]] std::string_view GetName() const;
 
 private:
 	ModuleSections_t m_ExecutableCode;
-	std::string m_sModulePath;
-	void* m_pModuleHandle;
+	std::string m_sPath;
+	void* m_pHandle;
 	std::vector<ModuleSections_t> m_vModuleSections;
 };
 

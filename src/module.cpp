@@ -15,7 +15,7 @@ using namespace DynLibUtils;
 // Purpose: constructor
 // Input  : szModuleName (without extension .dll/.so)
 //-----------------------------------------------------------------------------
-CModule::CModule(const std::string_view szModuleName) : m_pModuleHandle(nullptr)
+CModule::CModule(const std::string_view szModuleName) : m_pHandle(nullptr)
 {
 	InitFromName(szModuleName);
 }
@@ -24,7 +24,7 @@ CModule::CModule(const std::string_view szModuleName) : m_pModuleHandle(nullptr)
 // Purpose: constructor
 // Input  : pModuleMemory
 //-----------------------------------------------------------------------------
-CModule::CModule(const CMemory pModuleMemory) : m_pModuleHandle(nullptr)
+CModule::CModule(const CMemory pModuleMemory) : m_pHandle(nullptr)
 {
 	InitFromMemory(pModuleMemory);
 }
@@ -171,25 +171,25 @@ CModule::ModuleSections_t CModule::GetSectionByName(const std::string_view svSec
 //-----------------------------------------------------------------------------
 // Purpose: Returns the module handle
 //-----------------------------------------------------------------------------
-void* CModule::GetModuleHandle() const noexcept
+void* CModule::GetHandle() const noexcept
 {
-	return m_pModuleHandle;
+	return m_pHandle;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Returns the module path
 //-----------------------------------------------------------------------------
-std::string_view CModule::GetModulePath() const
+std::string_view CModule::GetPath() const
 {
-	return m_sModulePath;
+	return m_sPath;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Returns the module name
 //-----------------------------------------------------------------------------
-std::string_view CModule::GetModuleName() const
+std::string_view CModule::GetName() const
 {
-	std::string_view svModulePath(m_sModulePath);
+	std::string_view svModulePath(m_sPath);
 	return svModulePath.substr(svModulePath.find_last_of("/\\") + 1);
 }
 

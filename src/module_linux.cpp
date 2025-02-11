@@ -16,8 +16,8 @@ using namespace DynLibUtils;
 
 CModule::~CModule()
 {
-	if (m_pModuleHandle)
-		dlclose(m_pModuleHandle);
+	if (m_pHandle)
+		dlclose(m_pHandle);
 }
 
 //-----------------------------------------------------------------------------
@@ -28,7 +28,7 @@ CModule::~CModule()
 //-----------------------------------------------------------------------------
 bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 {
-	if (m_pModuleHandle)
+	if (m_pHandle)
 		return false;
 
 	if (svModuleName.empty())
@@ -74,7 +74,7 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 //-----------------------------------------------------------------------------
 bool CModule::InitFromMemory(const CMemory pModuleMemory)
 {
-	if (m_pModuleHandle)
+	if (m_pHandle)
 		return false;
 
 	if (!pModuleMemory)
@@ -138,8 +138,8 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 
 	close(fd);
 
-	m_pModuleHandle = handle;
-	m_sModulePath.assign(svModelePath);
+	m_pHandle = handle;
+	m_sPath.assign(svModelePath);
 
 	m_ExecutableCode = GetSectionByName(".text");
 
@@ -202,19 +202,19 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const noexcept
 {
-	if (!m_pModuleHandle)
+	if (!m_pHandle)
 		return CMemory();
 
 	if (svFunctionName.empty())
 		return CMemory();
 
-	return dlsym(m_pModuleHandle, svFunctionName.data());
+	return dlsym(m_pHandle, svFunctionName.data());
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Returns the module base
 //-----------------------------------------------------------------------------
-CMemory CModule::GetModuleBase() const noexcept
+CMemory CModule::GetBase() const noexcept
 {
-	return static_cast<link_map*>(m_pModuleHandle)->l_addr;
+	return static_cast<link_map*>(m_pHandle)->l_addr;
 }
