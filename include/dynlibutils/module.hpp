@@ -42,6 +42,7 @@ public:
 
 	CModule() : m_pHandle(nullptr) {}
 	~CModule();
+
 	CModule (const CModule&) = delete;
 	CModule& operator= (const CModule&) = delete;
 	CModule(CModule&& other) noexcept : m_ExecutableCode(std::move(other.m_ExecutableCode)), m_sPath(std::move(other.m_sPath)), m_pHandle(std::exchange(other.m_pHandle, nullptr)), m_vModuleSections(std::move(other.m_vModuleSections)) {}
@@ -67,10 +68,15 @@ public:
 	[[nodiscard]] CMemory GetBase() const noexcept;
 	[[nodiscard]] std::string_view GetPath() const;
 	[[nodiscard]] std::string_view GetName() const;
+	[[nodiscard]] std::string_view GetLastError() const;
+
+private:
+	void SaveLastError();
 
 private:
 	ModuleSections_t m_ExecutableCode;
 	std::string m_sPath;
+	std::string m_sLastError;
 	void* m_pHandle;
 	std::vector<ModuleSections_t> m_vModuleSections;
 };

@@ -184,6 +184,11 @@ std::string_view CModule::GetPath() const
 	return m_sPath;
 }
 
+std::string_view CModule::GetLastError() const
+{
+	return m_sLastError;
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: Returns the module name
 //-----------------------------------------------------------------------------

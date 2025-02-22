@@ -97,8 +97,8 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 {
 	void* handle = dlopen(svModelePath.data(), flags);
-
 	if (!handle) {
+		SaveLastError();
 		return false;
 	}
 
@@ -188,4 +188,9 @@ CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const 
 CMemory CModule::GetBase() const noexcept
 {
 	return static_cast<dlopen_handle*>(m_pHandle)->module;
+}
+
+void CModule::SaveLastError()
+{
+	m_sLastError = dlerror();
 }

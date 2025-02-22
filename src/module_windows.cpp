@@ -109,8 +109,10 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 {
 	HMODULE handle = LoadLibraryExA(svModelePath.data(), nullptr, flags);
-	if (!handle)
+	if (!handle) {
+		SaveLastError();
 		return false;
+	}
 
 	IMAGE_DOS_HEADER* pDOSHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(handle);
 	IMAGE_NT_HEADERS64* pNTHeaders = reinterpret_cast<IMAGE_NT_HEADERS64*>(reinterpret_cast<uintptr_t>(handle) + pDOSHeader->e_lfanew);
@@ -197,4 +199,28 @@ CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const 
 CMemory CModule::GetBase() const noexcept
 {
 	return m_pHandle;
+}
+
+void CModule::SaveLastError()
+{
+	auto errorCode = ::GetLastError();
+	if (errorCode == 0) {
+		return;
+	}
+
+	LPSTR messageBuffer = nullptr;
+
+	size_t size = FormatMessageA(
+			FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+			nullptr,
+			errorCode,
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			reinterpret_cast<LPSTR>(&messageBuffer),
+			0,
+			nullptr
+	);
+
+	m_sLastError.assign(messageBuffer, size);
+
+	LocalFree(messageBuffer);
 }

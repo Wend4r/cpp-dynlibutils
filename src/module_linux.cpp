@@ -96,8 +96,10 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 {
 	void* handle = dlopen(svModelePath.data(), flags);
-	if (!handle)
+	if (!handle) {
+		SaveLastError();
 		return false;
+	}
 
 	link_map* lmap;
 	if (dlinfo(handle, RTLD_DI_LINKMAP, &lmap) != 0)
@@ -217,4 +219,9 @@ CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const 
 CMemory CModule::GetBase() const noexcept
 {
 	return static_cast<link_map*>(m_pHandle)->l_addr;
+}
+
+void CModule::SaveLastError()
+{
+	m_sLastError = dlerror();
 }
