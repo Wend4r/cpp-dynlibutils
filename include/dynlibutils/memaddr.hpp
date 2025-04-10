@@ -17,78 +17,40 @@ namespace DynLibUtils {
 class CMemory
 {
 public:
+	// Constructor ones.
 	CMemory() : m_ptr(0) {}
 	CMemory(const CMemory&) noexcept = default;
 	CMemory& operator= (const CMemory&) noexcept = default;
-	CMemory(CMemory&& other) noexcept : m_ptr(std::exchange(other.m_ptr, 0)) {}
-	CMemory(const std::uintptr_t ptr) : m_ptr(ptr) {}
-	CMemory(const void* ptr) : m_ptr(reinterpret_cast<std::uintptr_t>(ptr)) {}
+	CMemory(CMemory&& other) noexcept : m_addr(std::exchange(other.m_addr, 0)) {}
+	CMemory(const std::uintptr_t addr) : m_addr(addr) {}
+	CMemory(const void* ptr) : m_ptr(ptr) {}
 
-	operator std::uintptr_t() const noexcept
-	{
-		return m_ptr;
-	}
+	/// Conversion operators.
+	operator const void*() const noexcept { return GetPointer(); }
+	operator std::uintptr_t() const noexcept { return GetAddress(); }
 
-	operator void*() const noexcept
-	{
-		return reinterpret_cast<void*>(m_ptr);
-	}
+	/// Compare operators.
+	bool operator==(const CMemory& comp) const noexcept { return m_addr == comp.m_addr; }
+	bool operator!=(const CMemory& comp) const noexcept { return !operator==(comp); }
+	bool operator<(const CMemory& comp) const noexcept { return m_addr < comp.m_addr; }
 
-	bool operator!= (const CMemory& addr) const noexcept
-	{
-		return m_ptr != addr.m_ptr;
-	}
+	/// Cast methods.
+	template<typename T> T CCast() const noexcept { return (T)m_addr; }
+	template<typename T> T RCast() const noexcept { return reinterpret_cast<T>(m_addr); }
+	template<typename T> T UCast() const noexcept { union { uintptr_t m_addr; T cptr; } cast; return cast.m_addr = m_addr, cast.cptr; }
 
-	bool operator== (const CMemory& addr) const noexcept
-	{
-		return m_ptr == addr.m_ptr;
-	}
+	/// Access methods.
+	const void* GetPointer() const noexcept { return m_ptr; }
+	std::ptrdiff_t GetAddress() const noexcept { return m_addr; }
+	template<class T> T Get() const noexcept { return *UCast<T*>(); }
+	template<class T> T GetValue() const noexcept { return Get<T>(); }
 
-	bool operator== (const std::uintptr_t& addr) const noexcept
-	{
-		return m_ptr == addr;
-	}
+	CMemory Offset(std::ptrdiff_t offset) const noexcept { return m_addr + offset; }
+	CMemory& OffsetSelf(std::ptrdiff_t offset) noexcept { m_addr += offset; return *this; }
 
-	[[nodiscard]] std::uintptr_t GetPtr() const noexcept
+	CMemory Deref(std::uintptr_t deref = 1) const
 	{
-		return m_ptr;
-	}
-
-	template<class T> [[nodiscard]] T GetValue() const noexcept
-	{
-		return *reinterpret_cast<T*>(m_ptr);
-	}
-
-	template<typename T> [[nodiscard]] T CCast() const noexcept
-	{
-		return (T)m_ptr;
-	}
-
-	template<typename T> [[nodiscard]] T RCast() const noexcept
-	{
-		return reinterpret_cast<T>(m_ptr);
-	}
-
-	template<typename T> [[nodiscard]] T UCast() const noexcept
-	{
-		union { uintptr_t m_ptr; T cptr; } cast;
-		return cast.m_ptr = m_ptr, cast.cptr;
-	}
-
-	[[nodiscard]] CMemory Offset(std::ptrdiff_t offset) const noexcept
-	{
-		return m_ptr + offset;
-	}
-
-	CMemory& OffsetSelf(std::ptrdiff_t offset) noexcept
-	{
-		m_ptr += offset;
-		return *this;
-	}
-
-	[[nodiscard]] CMemory Deref(std::uintptr_t deref = 1) const
-	{
-		std::uintptr_t reference = m_ptr;
+		std::uintptr_t reference = m_addr;
 
 		while (deref--)
 		{
@@ -103,14 +65,14 @@ public:
 	{
 		while (deref--)
 		{
-			if (m_ptr)
-				m_ptr = *reinterpret_cast<std::uintptr_t*>(m_ptr);
+			if (m_addr)
+				m_addr = *reinterpret_cast<std::uintptr_t*>(m_addr);
 		}
 
 		return *this;
 	}
 
-	[[nodiscard]] CMemory FollowNearCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5) const
+	CMemory FollowNearCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5) const
 	{
 		return ResolveRelativeAddress(opcodeOffset, nextInstructionOffset);
 	}
@@ -120,26 +82,32 @@ public:
 		return ResolveRelativeAddressSelf(opcodeOffset, nextInstructionOffset);
 	}
 
-	[[nodiscard]] CMemory ResolveRelativeAddress(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4) const
+	CMemory ResolveRelativeAddress(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4) const
 	{
-		const std::uintptr_t skipRegister = m_ptr + registerOffset;
+		const std::uintptr_t skipRegister = m_addr + registerOffset;
+		const std::uintptr_t nextInstruction = m_addr + nextInstructionOffset;
 		const std::int32_t relativeAddress = *reinterpret_cast<std::int32_t*>(skipRegister);
-		const std::uintptr_t nextInstruction = m_ptr + nextInstructionOffset;
+
 		return nextInstruction + relativeAddress;
 	}
 
 	CMemory& ResolveRelativeAddressSelf(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4)
 	{
-		const std::uintptr_t skipRegister = m_ptr + registerOffset;
+		const std::uintptr_t skipRegister = m_addr + registerOffset;
+		const std::uintptr_t nextInstruction = m_addr + nextInstructionOffset;
 		const std::int32_t relativeAddress = *reinterpret_cast<std::int32_t*>(skipRegister);
-		const std::uintptr_t nextInstruction = m_ptr + nextInstructionOffset;
-		m_ptr = nextInstruction + relativeAddress;
+
+		m_addr = nextInstruction + relativeAddress;
 
 		return *this;
 	}
 
 private:
-	std::uintptr_t m_ptr = 0;
+	union
+	{
+		const void* m_ptr;
+		std::uintptr_t m_addr;
+	};
 }; // class CMemory
 
 } // namespace DynLibUtils
