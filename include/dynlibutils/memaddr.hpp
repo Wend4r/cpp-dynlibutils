@@ -24,69 +24,69 @@ public:
 	CMemory(const std::uintptr_t ptr) : m_ptr(ptr) {}
 	CMemory(const void* ptr) : m_ptr(reinterpret_cast<std::uintptr_t>(ptr)) {}
 
-	inline operator std::uintptr_t() const noexcept
+	operator std::uintptr_t() const noexcept
 	{
 		return m_ptr;
 	}
 
-	inline operator void*() const noexcept
+	operator void*() const noexcept
 	{
 		return reinterpret_cast<void*>(m_ptr);
 	}
 
-	inline bool operator!= (const CMemory& addr) const noexcept
+	bool operator!= (const CMemory& addr) const noexcept
 	{
 		return m_ptr != addr.m_ptr;
 	}
 
-	inline bool operator== (const CMemory& addr) const noexcept
+	bool operator== (const CMemory& addr) const noexcept
 	{
 		return m_ptr == addr.m_ptr;
 	}
 
-	inline bool operator== (const std::uintptr_t& addr) const noexcept
+	bool operator== (const std::uintptr_t& addr) const noexcept
 	{
 		return m_ptr == addr;
 	}
 
-	[[nodiscard]] inline std::uintptr_t GetPtr() const noexcept
+	[[nodiscard]] std::uintptr_t GetPtr() const noexcept
 	{
 		return m_ptr;
 	}
 
-	template<class T> [[nodiscard]] inline T GetValue() const noexcept
+	template<class T> [[nodiscard]] T GetValue() const noexcept
 	{
 		return *reinterpret_cast<T*>(m_ptr);
 	}
 
-	template<typename T> [[nodiscard]] inline T CCast() const noexcept
+	template<typename T> [[nodiscard]] T CCast() const noexcept
 	{
 		return (T)m_ptr;
 	}
 
-	template<typename T> [[nodiscard]] inline T RCast() const noexcept
+	template<typename T> [[nodiscard]] T RCast() const noexcept
 	{
 		return reinterpret_cast<T>(m_ptr);
 	}
 
-	template<typename T> [[nodiscard]] inline T UCast() const noexcept
+	template<typename T> [[nodiscard]] T UCast() const noexcept
 	{
 		union { uintptr_t m_ptr; T cptr; } cast;
 		return cast.m_ptr = m_ptr, cast.cptr;
 	}
 
-	[[nodiscard]] inline CMemory Offset(std::ptrdiff_t offset) const noexcept
+	[[nodiscard]] CMemory Offset(std::ptrdiff_t offset) const noexcept
 	{
 		return m_ptr + offset;
 	}
 
-	inline CMemory& OffsetSelf(std::ptrdiff_t offset) noexcept
+	CMemory& OffsetSelf(std::ptrdiff_t offset) noexcept
 	{
 		m_ptr += offset;
 		return *this;
 	}
 
-	[[nodiscard]] inline CMemory Deref(std::uintptr_t deref = 1) const
+	[[nodiscard]] CMemory Deref(std::uintptr_t deref = 1) const
 	{
 		std::uintptr_t reference = m_ptr;
 
@@ -99,7 +99,7 @@ public:
 		return reference;
 	}
 
-	inline CMemory& DerefSelf(int deref = 1)
+	CMemory& DerefSelf(int deref = 1)
 	{
 		while (deref--)
 		{
@@ -110,17 +110,17 @@ public:
 		return *this;
 	}
 
-	[[nodiscard]] inline CMemory FollowNearCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5) const
+	[[nodiscard]] CMemory FollowNearCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5) const
 	{
 		return ResolveRelativeAddress(opcodeOffset, nextInstructionOffset);
 	}
 
-	inline CMemory& FollowNearCallSelf(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5)
+	CMemory& FollowNearCallSelf(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5)
 	{
 		return ResolveRelativeAddressSelf(opcodeOffset, nextInstructionOffset);
 	}
 
-	[[nodiscard]] inline CMemory ResolveRelativeAddress(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4) const
+	[[nodiscard]] CMemory ResolveRelativeAddress(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4) const
 	{
 		const std::uintptr_t skipRegister = m_ptr + registerOffset;
 		const std::int32_t relativeAddress = *reinterpret_cast<std::int32_t*>(skipRegister);
@@ -128,7 +128,7 @@ public:
 		return nextInstruction + relativeAddress;
 	}
 
-	inline CMemory& ResolveRelativeAddressSelf(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4)
+	CMemory& ResolveRelativeAddressSelf(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4)
 	{
 		const std::uintptr_t skipRegister = m_ptr + registerOffset;
 		const std::int32_t relativeAddress = *reinterpret_cast<std::int32_t*>(skipRegister);
