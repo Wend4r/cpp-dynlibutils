@@ -37,7 +37,7 @@ public:
 	/// Cast methods.
 	template<typename T> T CCast() const noexcept { return (T)m_addr; }
 	template<typename T> T RCast() const noexcept { return reinterpret_cast<T>(m_addr); }
-	template<typename T> T UCast() const noexcept { union { uintptr_t m_addr; T cptr; } cast; return cast.m_addr = m_addr, cast.cptr; }
+	template<typename T> T UCast() const noexcept { union { T cptr; std::uintptr_t m_addr; } cast; return cast.m_addr = m_addr, cast.cptr; }
 
 	/// Access methods.
 	const void* GetPointer() const noexcept { return m_ptr; }
