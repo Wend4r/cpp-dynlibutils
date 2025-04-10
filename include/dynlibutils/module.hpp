@@ -56,7 +56,7 @@ public:
 	bool InitFromName(const std::string_view svModuleName, bool bExtension = false);
 	bool InitFromMemory(const CMemory pModuleMemory);
 
-	[[nodiscard]] static std::pair<std::vector<uint8_t>, std::string> PatternToMaskedBytes(const std::string_view svInput);
+	[[nodiscard]] static std::pair<std::vector<std::uint8_t>, std::string> PatternToMaskedBytes(const std::string_view svInput);
 	[[nodiscard]] CMemory FindPattern(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress = nullptr, const ModuleSections_t* pModuleSection = nullptr) const;
 	[[nodiscard]] CMemory FindPattern(const std::string_view svPattern, const CMemory pStartAddress = nullptr, const ModuleSections_t* pModuleSection = nullptr) const;
 

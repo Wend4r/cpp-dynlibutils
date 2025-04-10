@@ -32,13 +32,13 @@ CModule::CModule(const CMemory pModuleMemory) : m_pHandle(nullptr)
 //-----------------------------------------------------------------------------
 // Purpose: Converts a string pattern with wildcards to an array of bytes and mask
 // Input  : svInput
-// Output : std::pair<std::vector<uint8_t>, std::string>
+// Output : std::pair<std::vector<std::uint8_t>, std::string>
 //-----------------------------------------------------------------------------
-std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(const std::string_view svInput)
+std::pair<std::vector<std::uint8_t>, std::string> CModule::PatternToMaskedBytes(const std::string_view svInput)
 {
 	char* pszPatternStart = const_cast<char*>(svInput.data());
 	char* pszPatternEnd = pszPatternStart + svInput.size();
-	std::vector<uint8_t> vBytes;
+	std::vector<std::uint8_t> vBytes;
 	std::string svMask;
 
 	for (char* pszCurrentByte = pszPatternStart; pszCurrentByte < pszPatternEnd; ++pszCurrentByte)
@@ -56,7 +56,7 @@ std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(const
 		}
 		else
 		{
-			vBytes.push_back(static_cast<uint8_t>(strtoul(pszCurrentByte, &pszCurrentByte, 16)));
+			vBytes.push_back(static_cast<std::uint8_t>(strtoul(pszCurrentByte, &pszCurrentByte, 16)));
 			svMask += 'x';
 		}
 	}
@@ -74,7 +74,7 @@ std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(const
 //-----------------------------------------------------------------------------
 CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress, const ModuleSections_t* pModuleSection) const
 {
-	const uint8_t* pattern = pPattern.RCast<const uint8_t*>();
+	const std::uint8_t* pattern = pPattern.RCast<const std::uint8_t*>();
 	const ModuleSections_t* section = pModuleSection ? pModuleSection : &m_ExecutableCode;
 	if (!section->IsSectionValid())
 		return CMemory();
@@ -83,12 +83,12 @@ CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMa
 	const size_t nSize = section->m_nSectionSize;
 
 	const size_t nMaskLen = szMask.length();
-	const uint8_t* pData = reinterpret_cast<uint8_t*>(nBase);
-	const uint8_t* pEnd = pData + nSize - nMaskLen;
+	const std::uint8_t* pData = reinterpret_cast<std::uint8_t*>(nBase);
+	const std::uint8_t* pEnd = pData + nSize - nMaskLen;
 
 	if(pStartAddress)
 	{
-		const uint8_t* startAddress = pStartAddress.RCast<uint8_t*>();
+		const std::uint8_t* startAddress = pStartAddress.RCast<std::uint8_t*>();
 		if(pData > startAddress || startAddress > pEnd)
 			return CMemory();
 
@@ -96,10 +96,10 @@ CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMa
 	}
 
 	int nMasks[64]; // 64*16 = enough masks for 1024 bytes.
-	const uint8_t iNumMasks = static_cast<uint8_t>(std::ceil(static_cast<float>(nMaskLen) / 16.f));
+	const std::uint8_t iNumMasks = static_cast<std::uint8_t>(std::ceil(static_cast<float>(nMaskLen) / 16.f));
 
 	memset(nMasks, 0, iNumMasks * sizeof(int));
-	for (uint8_t i = 0; i < iNumMasks; ++i)
+	for (std::uint8_t i = 0; i < iNumMasks; ++i)
 	{
 		for (int8_t j = static_cast<int8_t>(std::min<size_t>(nMaskLen - i * 16, 16)) - 1; j >= 0; --j)
 		{
@@ -119,7 +119,7 @@ CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMa
 		if ((_mm_movemask_epi8(msks) & nMasks[0]) == nMasks[0])
 		{
 			bool bFound = true;
-			for (uint8_t i = 1; i < iNumMasks; ++i)
+			for (std::uint8_t i = 1; i < iNumMasks; ++i)
 			{
 				xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pData + i * 16)));
 				xmm3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pattern + i * 16)));
