@@ -34,7 +34,7 @@ CModule::CModule(const CMemory pModuleMemory) : m_pHandle(nullptr)
 // Input  : svInput
 // Output : std::pair<std::vector<std::uint8_t>, std::string>
 //-----------------------------------------------------------------------------
-std::pair<std::vector<std::uint8_t>, std::string> CModule::PatternToMaskedBytes(const std::string_view svInput)
+MaskedBytes_t CModule::PatternToMaskedBytes(const std::string_view svInput)
 {
 	char* pszPatternStart = const_cast<char*>(svInput.data());
 	char* pszPatternEnd = pszPatternStart + svInput.size();

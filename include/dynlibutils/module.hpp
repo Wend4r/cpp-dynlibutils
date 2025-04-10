@@ -12,12 +12,15 @@
 
 #include "memaddr.hpp"
 
+#include <cassert>
 #include <vector>
 #include <string>
 #include <string_view>
 #include <utility>
 
 namespace DynLibUtils {
+
+using MaskedBytes_t = std::pair<std::vector<std::uint8_t>, std::string>;
 
 class CModule
 {
@@ -56,7 +59,7 @@ public:
 	bool InitFromName(const std::string_view svModuleName, bool bExtension = false);
 	bool InitFromMemory(const CMemory pModuleMemory);
 
-	[[nodiscard]] static std::pair<std::vector<std::uint8_t>, std::string> PatternToMaskedBytes(const std::string_view svInput);
+	[[nodiscard]] static MaskedBytes_t PatternToMaskedBytes(const std::string_view svInput);
 	[[nodiscard]] CMemory FindPattern(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress = nullptr, const ModuleSections_t* pModuleSection = nullptr) const;
 	[[nodiscard]] CMemory FindPattern(const std::string_view svPattern, const CMemory pStartAddress = nullptr, const ModuleSections_t* pModuleSection = nullptr) const;
 
@@ -80,6 +83,66 @@ private:
 	void* m_pHandle;
 	std::vector<ModuleSections_t> m_vModuleSections;
 };
+
+#ifdef __cpp_consteval
+inline consteval MaskedBytes_t PatternToMaskedBytes(std::string_view svInput)
+{
+	std::vector<std::uint8_t> vecBytes;
+	std::string sMask;
+
+	auto funcCharIsHEX = [](char c)
+	{
+		return ('0' <= c && c <= '9') || 
+		       ('a' <= c && c <= 'f') || 
+		       ('A' <= c && c <= 'F');
+	};
+
+	auto funcHEXCharToValue = [](char c) -> std::uint8_t
+	{
+		if ('0' <= c && c <= '9') return c - '0';
+		if ('a' <= c && c <= 'f') return 10 + (c - 'a');
+		if ('A' <= c && c <= 'F') return 10 + (c - 'A');
+
+		return 0;
+	};
+
+	for (std::size_t i = 0; i < svInput.size();)
+	{
+		if (svInput[i] == '?')
+		{
+			// Wildcard?
+			if (i + 1 < svInput.size() && svInput[i + 1] == '?')
+				++i;
+			++i;
+
+			vecBytes.push_back(0x00);
+			sMask.push_back('?');
+		}
+		else if (funcCharIsHEX(svInput[i]) && i + 1 < svInput.size() && funcCharIsHEX(svInput[i + 1]))
+		{
+			std::uint8_t value = (funcHEXCharToValue(svInput[i]) << 4) | funcHEXCharToValue(svInput[i + 1]);
+
+			vecBytes.push_back(value);
+			sMask.push_back('x');
+
+			i += 2;
+		}
+		else if (svInput[i] == ' ')
+		{
+			++i;
+		}
+		else
+		{
+			assert(false && R"(Passing invalid characters. Allowed ones: <space>, "0-9", "a-f", "A-F" or "?")");
+
+			// Skip invalid characters silently.
+			++i;
+		}
+	}
+
+	return MaskedBytes_t{vecBytes, sMask};
+}
+#endif // defined(__cpp_consteval)
 
 } // namespace DynLibUtils
 
