@@ -8,25 +8,34 @@
 #pragma once
 #endif
 
-#include <stddef.h>
+#include "memaddr.hpp"
 
 namespace DynLibUtils {
 
-class VirtualTable
+class CVirtualTable
+{
+public: // Types.
+	using CThis = CVirtualTable;
+
+public: // Constructor.
+	CVirtualTable() = default;
+	template<class T> CVirtualTable(T *pClass) { this = reinterpret_cast<CThis *>(pClass); }
+
+public: // Getters.
+	template<typename R> R GetMethod(ptrdiff_t nIndex) const { return reinterpret_cast<R>((*CMemory(this).RCast<void ***>())[nIndex]); }
+
+public: // Call methods.
+	template<typename R, typename... Args> R CallMethod(ptrdiff_t nIndex, Args... args) { return this->GetMethod<R (*)(CThis *, Args...)>(nIndex)(this, args...); }
+	template<typename R, typename... Args> R CallMethod(ptrdiff_t nIndex, Args... args) const { return const_cast<CThis *>(this)->CallMethod(nIndex, args...); }
+}; // class CVirtualTable
+
+class VirtualTable final : public CVirtualTable
 {
 public:
-	template<typename T>
-	inline T GetMethod(ptrdiff_t nIndex)
-	{
-		return reinterpret_cast<T>((*(void ***)(this))[nIndex]);
-	}
-
-	template<typename T, typename... Args>
-	inline T CallMethod(ptrdiff_t nIndex, Args... args)
-	{
-		return this->GetMethod<T (*)(VirtualTable *, Args...)>(nIndex)(this, args...);
-	}
-};
+	using CBase = CVirtualTable;
+	using CBase::CBase;
+	// ...
+}; // class VirtualTable
 
 } // namespace DynLibUtils
 
