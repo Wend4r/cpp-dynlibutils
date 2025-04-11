@@ -50,8 +50,8 @@ public:
 		static constexpr auto sm_nMaxSize = N;
 
 		std::size_t m_nSize = 0;
-		std::array<std::uint8_t, sm_nMaxPatternSize> m_aBytes{};
-		std::array<char, sm_nMaxPatternSize> m_aMask{};
+		std::array<std::uint8_t, N> m_aBytes{};
+		std::array<char, N> m_aMask{};
 	};
 
 	CModule() : m_pExecutableSection(nullptr), m_pHandle(nullptr) {}
@@ -70,13 +70,108 @@ public:
 	bool InitFromName(const std::string_view svModuleName, bool bExtension = false);
 	bool InitFromMemory(const CMemory pModuleMemory, bool bForce = true);
 
+protected: // Internal pattern methods.
+	template<std::size_t INDEX = 0, std::size_t N>
+	[[always_inline, nodiscard]] static inline 
+#ifdef __cpp_consteval
+	consteval 
+#else
+	constexpr 
+#endif
+	void ProcessPattern(const char (&szInput)[N], std::size_t& i, std::size_t& nIndex, std::array<std::uint8_t, N / 2>& aBytes, std::array<char, N / 2>& aMask)
+	{
+		constexpr auto funcIsHexDigit = [](char c) -> bool
+		{
+			return ('0' <= c && c <= '9') || ('A' <= c && c <= 'F') || ('a' <= c && c <= 'f');
+		};
+
+		constexpr auto funcHexCharToByte = [](char c) -> std::uint8_t
+		{
+			return ('0' <= c && c <= '9') ? c - '0' : ('A' <= c && c <= 'F') ? c - 'A' + 10 : c - 'a' + 10;
+		};
+
+		constexpr std::size_t nLength = N - 1; // Exclude null-terminated character.
+
+		if constexpr (INDEX < nLength)
+		{
+			const char c = szInput[i];
+
+			if (c == ' ') 
+			{
+				i++;
+				ProcessPattern<INDEX + 1>(szInput, i, nIndex, aBytes, aMask);
+			}
+			else if (c == '?')
+			{
+				aBytes[nIndex] = 0;
+				aMask[nIndex] = '?';
+
+				i++;
+
+				if (i < nLength && szInput[i] == '?')
+					i++;
+
+				nIndex++;
+				ProcessPattern<INDEX + 1>(szInput, i, nIndex, aBytes, aMask);
+			}
+			else if (funcIsHexDigit(c))
+			{
+				if (i + 1 < nLength)
+				{
+					if (funcIsHexDigit(szInput[i + 1]))
+					{
+						aBytes[nIndex] = (funcHexCharToByte(c) << 4) | funcHexCharToByte(szInput[i + 1]);
+						aMask[nIndex] = 'x';
+
+						i += 2;
+						nIndex++;
+						ProcessPattern<INDEX + 1>(szInput, i, nIndex, aBytes, aMask);
+					}
+					else
+					{
+						static_assert(R"(Invalid character in pattern. Allowed: <space> or pair: "0-9", "a-f", "A-F" or "?")");
+					}
+				}
+				else
+				{
+					static_assert("Missing second hexadecimal digit in pattern");
+				}
+			}
+			else
+			{
+				static_assert("Invalid character in pattern");
+			}
+		}
+	}
+
+public:
 	//-----------------------------------------------------------------------------
 	// Purpose: Converts a string pattern with wildcards to an array of bytes and mask
 	// Input  : svInput - pattern string like "48 8B ?? 89 ?? ?? 41"
-	// Output : Pattern_t<N> (fixed-size array by N cells with mask and used size)
-	//-----------------------------------------------------------------------------
+	// Output : Pattern_t<N / 2> (fixed-size array by N cells with mask and used size)
+	//----------------------------------------------------------------------------
+	template<std::size_t N>
+	[[nodiscard]] static 
+#ifdef __cpp_consteval
+	consteval 
+#else
+	constexpr 
+#endif
+	Pattern_t<N / 2> ParsePatternString(const char (&szInput)[N])
+	{
+		static_assert(N > 1, "Pattern cannot be empty");
+
+		std::size_t i = 0;
+
+		Pattern_t<N / 2> result{};
+
+		ProcessPattern<0>(szInput, i, result.m_nSize, result.m_aBytes, result.m_aMask);
+
+		return result;
+	}
+
 	template<std::size_t N = sm_nMaxPatternSize>
-	[[always_inline, nodiscard]] static inline constexpr Pattern_t<N> ParsePattern(const std::string_view svInput)
+	[[nodiscard]] static Pattern_t<N> ParsePattern(const std::string_view svInput)
 	{
 		Pattern_t<N> result {};
 
@@ -132,11 +227,6 @@ public:
 		result.m_nSize = nOut;
 
 		return result;
-	}
-	template<std::size_t N>
-	[[always_inline, nodiscard]] static inline constexpr Pattern_t<N> ParsePatternString(const char (&szInput)[N])
-	{
-		return ParsePattern<N>(std::string_view(szInput, N - 1));
 	}
 
 	//-----------------------------------------------------------------------------
@@ -223,17 +313,10 @@ public:
 		return DYNLIB_INVALID_MEMORY;
 	}
 
-	template<std::size_t N> [[always_inline, flatten, hot, nodiscard]] inline constexpr CMemory FindPattern(Pattern_t<N>&& pattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
+	template<std::size_t N>
+	[[nodiscard]] inline CMemory FindPattern(Pattern_t<N>&& pattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
 		return FindPattern<N>(CMemory(pattern.m_aBytes.data()), std::string_view(pattern.m_aMask.data()), pStartAddress, pModuleSection);
-	}
-	template<std::size_t N> [[always_inline, flatten, hot, nodiscard]] inline constexpr CMemory FindPatternString(const char (&szInput)[N], const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
-	{
-		return FindPattern(ParsePatternString(szInput), pStartAddress, pModuleSection);
-	}
-	[[nodiscard]] CMemory FindPattern(const std::string_view svPattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
-	{
-		return FindPattern(ParsePattern(svPattern), pStartAddress, pModuleSection);
 	}
 
 	[[nodiscard]] CMemory GetVirtualTableByName(const std::string_view svTableName, bool bDecorated = false) const;
