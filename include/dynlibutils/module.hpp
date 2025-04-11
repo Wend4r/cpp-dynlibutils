@@ -21,15 +21,6 @@
 
 namespace DynLibUtils {
 
-static constexpr size_t sm_nMaxPatternLength = 64;
-
-struct MaskedBytes_t
-{
-	std::array<std::uint8_t, sm_nMaxPatternLength> m_aBytes{};
-	std::array<char, sm_nMaxPatternLength> m_aMask{};
-	std::size_t m_nSize = 0;
-};
-
 class CModule
 {
 public:
@@ -46,6 +37,15 @@ public:
 		size_t m_nSectionSize;          // Size of the section.
 		std::string m_svSectionName;    // Name of the section.
 		CMemory m_pBase;                // Start address of the section.
+	};
+
+	static constexpr size_t sm_nMaxPatternLength = 64;
+
+	struct Pattern_t
+	{
+		std::size_t m_nSize = 0;
+		std::array<std::uint8_t, sm_nMaxPatternLength> m_aBytes{};
+		std::array<char, sm_nMaxPatternLength> m_aMask{};
 	};
 
 	CModule() : m_pHandle(nullptr) {}
@@ -67,11 +67,11 @@ public:
 	//-----------------------------------------------------------------------------
 	// Purpose: Converts a string pattern with wildcards to an array of bytes and mask
 	// Input  : svInput - pattern string like "48 8B ?? 89 ?? ?? 41"
-	// Output : MaskedBytes_t (fixed-size array with mask and used size)
+	// Output : Pattern_t (fixed-size array with mask and used size)
 	//-----------------------------------------------------------------------------
-	[[nodiscard]] static constexpr MaskedBytes_t PatternToMaskedBytes(const std::string_view svInput)
+	[[nodiscard]] static constexpr Pattern_t ParsePattern(const std::string_view svInput)
 	{
-		MaskedBytes_t result {};
+		Pattern_t result {};
 
 		auto funcIsHex = [](char c) -> bool
 		{
@@ -133,27 +133,27 @@ public:
 
 #ifdef __cpp_consteval
 	template<std::size_t N>
-	[[nodiscard]] static consteval MaskedBytes_t PatternToMaskedBytes(const char (&szInput)[N])
+	[[nodiscard]] static consteval Pattern_t ParsePattern(const char (&szInput)[N])
 	{
-		return PatternToMaskedBytes(std::string_view(szInput, N - 1));
+		return ParsePattern(std::string_view(szInput, N - 1));
 	}
 
-	[[nodiscard]] static auto PatternToMaskedBytesAuto(auto input)
+	[[nodiscard]] static auto ParsePatternFromString(auto input)
 	{
 		if consteval
 		{
-			return PatternToMaskedBytes(input);
+			return ParsePattern(input);
 		}
 		else
 		{
-			return PatternToMaskedBytes(std::string_view(input));
+			return ParsePattern(std::string_view(input));
 		}
 	}
 #endif // defined(__cpp_consteval)
 	[[nodiscard]] CMemory FindPattern(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const;
 	[[nodiscard]] CMemory FindPattern(const std::string_view svPattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
-		const auto maskedBytes = PatternToMaskedBytes(svPattern);
+		const auto maskedBytes = ParsePattern(svPattern);
 
 		return FindPattern(maskedBytes.m_aBytes.data(), maskedBytes.m_aMask.data(), pStartAddress, pModuleSection);
 	}
