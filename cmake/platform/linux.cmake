@@ -15,7 +15,7 @@ set(PLATFORM_COMPILE_OPTIONS
 	-Wno-unused -Wno-register
 	-Wno-narrowing
 
-	-mtune=generic -mmmx -msse -msse2 -msse3 -msse4 -msse4.1
+	-mtune=generic -mmmx -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2
 	-fvisibility=default -fPIC
 
 	-fno-strict-aliasing -fno-threadsafe-statics
