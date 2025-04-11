@@ -4,9 +4,8 @@
 
 #ifndef DYNLIBUTILS_MEMADDR_HPP
 #define DYNLIBUTILS_MEMADDR_HPP
-#ifdef _WIN32
+
 #pragma once
-#endif
 
 #include <cstdint>
 #include <cstddef>

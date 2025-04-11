@@ -6,9 +6,8 @@
 
 #ifndef DYNLIBUTILS_MODULE_HPP
 #define DYNLIBUTILS_MODULE_HPP
-#ifdef _WIN32
+
 #pragma once
-#endif
 
 #include "memaddr.hpp"
 
