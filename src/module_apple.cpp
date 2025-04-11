@@ -73,12 +73,11 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 // Input  : pModuleMemory
 // Output : bool
 //-----------------------------------------------------------------------------
-bool CModule::InitFromMemory(const CMemory pModuleMemory)
+bool CModule::InitFromMemory(const CMemory pModuleMemory, bool bForce)
 {
-	if (m_pHandle)
-		return false;
+	assert(pModuleMemory.IsValid());
 
-	if (!pModuleMemory)
+	if (!bForce && m_pHandle)
 		return false;
 
 	Dl_info info;
@@ -105,7 +104,7 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 	m_pHandle = handle;
 	m_sPath = std::move(svModelePath);
 
-	if (m_vModuleSections.size())
+	if (m_vecSections.size())
 		return true;
 
 	const MachHeader* header = reinterpret_cast<const MachHeader*>(m_pHandle);
@@ -135,17 +134,18 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 
 			for (uint32_t j = 0; j < seg->nsects; ++j) {
 				const MachSection& section = sec[j];
-				m_vModuleSections.emplace_back(
+				m_vecSections.emplace_back(
+					section.size,
 					section.sectname,
-					reinterpret_cast<uintptr_t>(m_pHandle) + section.addr,
-					section.size
+					reinterpret_cast<uintptr_t>(m_pHandle) + section.addr
 				);
 			}
 		}
 		cmd = reinterpret_cast<const load_command*>(reinterpret_cast<uintptr_t>(cmd) + cmd->cmdsize);
 	}
 
-	m_ExecutableCode = GetSectionByName("__TEXT");
+	m_pExecutableSection = GetSectionByName("__TEXT");
+	assert(m_pExecutableSection != nullptr);
 
 	return true;
 }
@@ -159,11 +159,11 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool bDecorated) const
 {
 	if (svTableName.empty())
-		return CMemory();
+		return DYNLIB_INVALID_MEMORY;
 
 	// TODO: Implement
 
-	return CMemory();
+	return DYNLIB_INVALID_MEMORY;
 }
 
 //-----------------------------------------------------------------------------
@@ -173,11 +173,10 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const noexcept
 {
-	if (!m_pHandle)
-		return CMemory();
+	assert(!svFunctionName.empty());
 
-	if (svFunctionName.empty())
-		return CMemory();
+	if (!m_pHandle)
+		return DYNLIB_INVALID_MEMORY;
 
 	return dlsym(m_pHandle, svFunctionName.data());
 }

@@ -30,101 +30,81 @@ CModule::CModule(const CMemory pModuleMemory) : m_pHandle(nullptr)
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Converts a string pattern with wildcards to an array of bytes and mask
-// Input  : svInput
-// Output : std::pair<std::vector<std::uint8_t>, std::string>
-//-----------------------------------------------------------------------------
-MaskedBytes_t CModule::PatternToMaskedBytes(const std::string_view svInput)
-{
-	char* pszPatternStart = const_cast<char*>(svInput.data());
-	char* pszPatternEnd = pszPatternStart + svInput.size();
-	std::vector<std::uint8_t> vBytes;
-	std::string svMask;
-
-	for (char* pszCurrentByte = pszPatternStart; pszCurrentByte < pszPatternEnd; ++pszCurrentByte)
-	{
-		if (*pszCurrentByte == '?')
-		{
-			++pszCurrentByte;
-			if (*pszCurrentByte == '?')
-			{
-				++pszCurrentByte; // Skip double wildcard.
-			}
-
-			vBytes.push_back(0); // Push the byte back as invalid.
-			svMask += '?';
-		}
-		else
-		{
-			vBytes.push_back(static_cast<std::uint8_t>(strtoul(pszCurrentByte, &pszCurrentByte, 16)));
-			svMask += 'x';
-		}
-	}
-
-	return std::make_pair(std::move(vBytes), std::move(svMask));
-}
-
-//-----------------------------------------------------------------------------
 // Purpose: Finds an array of bytes in process memory using SIMD instructions
 // Input  : *pPattern
-//          szMask
+//          svMask
 //          pStartAddress
 //          *pModuleSection
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress, const ModuleSections_t* pModuleSection) const
+CMemory CModule::FindPattern(const CMemory pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
 {
-	const std::uint8_t* pattern = pPattern.RCast<const std::uint8_t*>();
-	const ModuleSections_t* section = pModuleSection ? pModuleSection : &m_ExecutableCode;
-	if (!section->IsSectionValid())
-		return CMemory();
+	const auto* pPattern = pPatternMem.RCast<const std::uint8_t*>();
 
-	const uintptr_t nBase = section->m_pSectionBase;
-	const size_t nSize = section->m_nSectionSize;
+	const Section_t* pSection = pModuleSection ? pModuleSection : m_pExecutableSection;
 
-	const size_t nMaskLen = szMask.length();
-	const std::uint8_t* pData = reinterpret_cast<std::uint8_t*>(nBase);
-	const std::uint8_t* pEnd = pData + nSize - nMaskLen;
+	assert(pSection->IsValid());
 
-	if(pStartAddress)
+	const uintptr_t base = pSection->m_pBase;
+	const size_t sectionSize = pSection->m_nSectionSize;
+	const size_t patternSize = svMask.length();
+
+	auto* pData = reinterpret_cast<std::uint8_t*>(base);
+	const auto* end = pData + sectionSize - patternSize;
+
+	if (pStartAddress)
 	{
-		const std::uint8_t* startAddress = pStartAddress.RCast<std::uint8_t*>();
-		if(pData > startAddress || startAddress > pEnd)
-			return CMemory();
+		auto* start = pStartAddress.RCast<std::uint8_t*>();
+		if (start < pData || start > end)
+			return DYNLIB_INVALID_MEMORY;
 
-		pData = startAddress;
+		pData = start;
 	}
 
-	int nMasks[64]; // 64*16 = enough masks for 1024 bytes.
-	const std::uint8_t iNumMasks = static_cast<std::uint8_t>(std::ceil(static_cast<float>(nMaskLen) / 16.f));
+	// Prepare bitmasks for each 16-byte chunk of the pPattern.
+	const std::uint8_t numMasks = static_cast<std::uint8_t>((patternSize + 15) / 16);
 
-	memset(nMasks, 0, iNumMasks * sizeof(int));
-	for (std::uint8_t i = 0; i < iNumMasks; ++i)
+	int masks[64] = {0}; // Support up to 1024-byte patterns.
+
+	for (std::uint8_t i = 0; i < numMasks; ++i)
 	{
-		for (int8_t j = static_cast<int8_t>(std::min<size_t>(nMaskLen - i * 16, 16)) - 1; j >= 0; --j)
+		const size_t offset = i * 16;
+		const size_t chunkSize = std::min<size_t>(patternSize - offset, 16);
+
+		for (std::uint8_t j = 0; j < chunkSize; ++j)
 		{
-			if (szMask[i * 16 + j] == 'x')
+			if (svMask[offset + j] == 'x')
 			{
-				nMasks[i] |= 1 << j;
+				masks[i] |= (1 << j); // Set bit for bytes that must match.
 			}
 		}
 	}
 
-	const __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pattern));
-	__m128i xmm2, xmm3, msks;
-	for (; pData != pEnd; _mm_prefetch(reinterpret_cast<const char*>(++pData + 64), _MM_HINT_NTA))
+	const __m128i patternChunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pPattern));
+
+	for (; pData <= end; ++pData)
 	{
-		xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData));
-		msks = _mm_cmpeq_epi8(xmm1, xmm2);
-		if ((_mm_movemask_epi8(msks) & nMasks[0]) == nMasks[0])
+		// Prefetch next memory region to reduce cache misses.
+		_mm_prefetch(reinterpret_cast<const char*>(pData + 64), _MM_HINT_NTA);
+
+		// Compare first 16-byte block.
+		__m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData));
+		__m128i cmpMask = _mm_cmpeq_epi8(patternChunk, chunk);
+
+		if ((_mm_movemask_epi8(cmpMask) & masks[0]) != masks[0])
+			continue;
+
+		// If pattern is longer than 16 bytes, verify remaining blocks:
 		{
 			bool bFound = true;
-			for (std::uint8_t i = 1; i < iNumMasks; ++i)
+
+			for (std::uint8_t i = 1; i < numMasks; ++i)
 			{
-				xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pData + i * 16)));
-				xmm3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pattern + i * 16)));
-				msks = _mm_cmpeq_epi8(xmm2, xmm3);
-				if ((_mm_movemask_epi8(msks) & nMasks[i]) != nMasks[i])
+				const __m128i chunkPattern = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pPattern + i * 16));
+				const __m128i chunkMemory = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData + i * 16));
+				const __m128i cmp = _mm_cmpeq_epi8(chunkPattern, chunkMemory);
+
+				if ((_mm_movemask_epi8(cmp) & masks[i]) != masks[i])
 				{
 					bFound = false;
 					break;
@@ -136,66 +116,7 @@ CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMa
 		}
 	}
 
-	return CMemory();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Finds a string pattern in process memory using SIMD instructions
-// Input  : svPattern
-//          pStartAddress
-//          *pModuleSection
-// Output : CMemory
-//-----------------------------------------------------------------------------
-CMemory CModule::FindPattern(const std::string_view svPattern, const CMemory pStartAddress, const ModuleSections_t* pModuleSection) const
-{
-	const std::pair patternInfo = PatternToMaskedBytes(svPattern);
-	return FindPattern(patternInfo.first.data(), patternInfo.second, pStartAddress, pModuleSection);
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Gets a module section by name (example: '.rdata', '.text')
-// Input  : svModuleName
-// Output : ModuleSections_t
-//-----------------------------------------------------------------------------
-CModule::ModuleSections_t CModule::GetSectionByName(const std::string_view svSectionName) const
-{
-	for (const ModuleSections_t& section : m_vModuleSections)
-	{
-		if (section.m_svSectionName == svSectionName)
-			return section;
-	}
-
-	return ModuleSections_t();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Returns the module handle
-//-----------------------------------------------------------------------------
-void* CModule::GetHandle() const noexcept
-{
-	return m_pHandle;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Returns the module path
-//-----------------------------------------------------------------------------
-std::string_view CModule::GetPath() const
-{
-	return m_sPath;
-}
-
-std::string_view CModule::GetLastError() const
-{
-	return m_sLastError;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Returns the module name
-//-----------------------------------------------------------------------------
-std::string_view CModule::GetName() const
-{
-	std::string_view svModulePath(m_sPath);
-	return svModulePath.substr(svModulePath.find_last_of("/\\") + 1);
+	return DYNLIB_INVALID_MEMORY;
 }
 
 #ifndef DYNLIBUTILS_SEPARATE_SOURCE_FILES

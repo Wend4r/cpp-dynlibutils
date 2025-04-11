@@ -12,7 +12,7 @@
 #include <windows.h>
 #undef WIN32_LEAN_AND_MEAN
 
-using namespace DynLibUtils;
+namespace DynLibUtils {
 
 CModule::~CModule()
 {
@@ -20,7 +20,7 @@ CModule::~CModule()
 		FreeLibrary(reinterpret_cast<HMODULE>(m_pHandle));
 }
 
-static std::string GetPath(HMODULE hModule)
+static std::string GetModulePath(HMODULE hModule)
 {
 	std::string modulePath(MAX_PATH, '\0');
 	while (true)
@@ -52,10 +52,9 @@ static std::string GetPath(HMODULE hModule)
 //-----------------------------------------------------------------------------
 bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 {
-	if (m_pHandle)
-		return false;
+	assert(!svModuleName.empty());
 
-	if (svModuleName.empty())
+	if (m_pHandle)
 		return false;
 
 	std::string sModuleName(svModuleName);
@@ -66,7 +65,7 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 	if (!handle)
 		return false;
 
-	std::string modulePath = ::GetPath(handle);
+	std::string modulePath = GetModulePath(handle);
 	if(modulePath.empty())
 		return false;
 
@@ -81,19 +80,18 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 // Input  : pModuleMemory
 // Output : bool
 //-----------------------------------------------------------------------------
-bool CModule::InitFromMemory(const CMemory pModuleMemory)
+bool CModule::InitFromMemory(const CMemory pModuleMemory, bool bForce)
 {
-	if (m_pHandle)
-		return false;
+	assert(pModuleMemory.IsValid());
 
-	if (!pModuleMemory)
+	if (!bForce && m_pHandle)
 		return false;
 
 	MEMORY_BASIC_INFORMATION mbi;
 	if (!VirtualQuery(pModuleMemory, &mbi, sizeof(mbi)))
 		return false;
 
-	std::string modulePath = ::GetPath(reinterpret_cast<HMODULE>(mbi.AllocationBase));
+	std::string modulePath = GetModulePath(reinterpret_cast<HMODULE>(mbi.AllocationBase));
 	if (modulePath.empty())
 		return false;
 
@@ -109,7 +107,8 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 {
 	HMODULE handle = LoadLibraryExA(svModelePath.data(), nullptr, flags);
-	if (!handle) {
+	if (!handle)
+	{
 		SaveLastError();
 		return false;
 	}
@@ -122,13 +121,13 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 	for (WORD i = 0; i < pNTHeaders->FileHeader.NumberOfSections; ++i) // Loop through the sections.
 	{
 		const IMAGE_SECTION_HEADER& hCurrentSection = hSection[i]; // Get current section.
-		m_vModuleSections.emplace_back(reinterpret_cast<const char*>(hCurrentSection.Name), static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(handle) + hCurrentSection.VirtualAddress), hCurrentSection.SizeOfRawData); // Push back a struct with the section data.
+		m_vecSections.emplace_back(hCurrentSection.SizeOfRawData, reinterpret_cast<const char*>(hCurrentSection.Name), static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(handle) + hCurrentSection.VirtualAddress)); // Push back a struct with the section data.
 	}
 
 	m_pHandle = handle;
 	m_sPath.assign(svModelePath);
 
-	m_ExecutableCode = GetSectionByName(".text");
+	m_pExecutableSection = GetSectionByName(".text");
 
 	return true;
 }
@@ -141,32 +140,32 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 //-----------------------------------------------------------------------------
 CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool bDecorated) const
 {
-	if(svTableName.empty())
-		return CMemory();
+	assert(!svTableName.empty());
 	
-	CModule::ModuleSections_t runTimeData = GetSectionByName(".data"), readOnlyData = GetSectionByName(".rdata");
-	if(!runTimeData.IsSectionValid() || !readOnlyData.IsSectionValid())
-		return CMemory();
+	const Section_t *pRunTimeData = GetSectionByName(".data"), *pReadOnlyData = GetSectionByName(".rdata");
+
+	assert(pRunTimeData != nullptr);
+	assert(pReadOnlyData != nullptr);
 
 	std::string sDecoratedTableName(bDecorated ? svTableName : ".?AV" + std::string(svTableName) + "@@");
 	std::string sMask(sDecoratedTableName.length() + 1, 'x');
 
-	CMemory typeDescriptorName = FindPattern(sDecoratedTableName.data(), sMask, nullptr, &runTimeData);
+	CMemory typeDescriptorName = FindPattern(sDecoratedTableName.data(), sMask, nullptr, pRunTimeData);
 	if (!typeDescriptorName)
-		return CMemory();
+		return DYNLIB_INVALID_MEMORY;
 
 	CMemory rttiTypeDescriptor = typeDescriptorName.Offset(-0x10);
 	const uintptr_t rttiTDRva = rttiTypeDescriptor - GetBase(); // The RTTI gets referenced by a 4-Byte RVA address. We need to scan for that address.
 
 	CMemory reference;
-	while ((reference = FindPattern(&rttiTDRva, "xxxx", reference, &readOnlyData))) // Get reference typeinfo in vtable
+	while ((reference = FindPattern(&rttiTDRva, "xxxx", reference, pReadOnlyData))) // Get reference typeinfo in vtable
 	{
 		// Check if we got a RTTI Object Locator for this reference by checking if -0xC is 1, which is the 'signature' field which is always 1 on x64.
 		// Check that offset of this vtable is 0
 		if (reference.Offset(-0xC).GetValue<int32_t>() == 1 && reference.Offset(-0x8).GetValue<int32_t>() == 0)
 		{
 			CMemory referenceOffset = reference.Offset(-0xC);
-			CMemory rttiCompleteObjectLocator = FindPattern(&referenceOffset, "xxxxxxxx", nullptr, &readOnlyData);
+			CMemory rttiCompleteObjectLocator = FindPattern(&referenceOffset, "xxxxxxxx", nullptr, pReadOnlyData);
 			if (rttiCompleteObjectLocator)
 				return rttiCompleteObjectLocator.Offset(0x8);
 		}
@@ -174,7 +173,7 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 		reference.OffsetSelf(0x4);
 	}
 
-	return CMemory();
+	return DYNLIB_INVALID_MEMORY;
 }
 
 //-----------------------------------------------------------------------------
@@ -184,11 +183,10 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const noexcept
 {
-	if(!m_pHandle)
-		return CMemory();
+	assert(!svFunctionName.empty());
 
-	if (svFunctionName.empty())
-		return CMemory();
+	if(!m_pHandle)
+		return DYNLIB_INVALID_MEMORY;
 
 	return GetProcAddress(reinterpret_cast<HMODULE>(m_pHandle), svFunctionName.data());
 }
@@ -224,3 +222,5 @@ void CModule::SaveLastError()
 
 	LocalFree(messageBuffer);
 }
+
+}; // namespace DynLibUtils

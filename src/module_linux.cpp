@@ -72,12 +72,11 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 // Input  : pModuleMemory
 // Output : bool
 //-----------------------------------------------------------------------------
-bool CModule::InitFromMemory(const CMemory pModuleMemory)
+bool CModule::InitFromMemory(const CMemory pModuleMemory, bool bForce)
 {
-	if (m_pHandle)
-		return false;
+	assert(pModuleMemory.IsValid());
 
-	if (!pModuleMemory)
+	if (!bForce && m_pHandle)
 		return false;
 
 	Dl_info info;
@@ -96,7 +95,8 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory)
 bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 {
 	void* handle = dlopen(svModelePath.data(), flags);
-	if (!handle) {
+	if (!handle)
+	{
 		SaveLastError();
 		return false;
 	}
@@ -131,7 +131,7 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 				if (*(strTab + shdr->sh_name) == '\0')
 					continue;
 
-				m_vModuleSections.emplace_back(strTab + shdr->sh_name, static_cast<uintptr_t>(lmap->l_addr + shdr->sh_addr), shdr->sh_size);
+				m_vecSections.emplace_back(shdr->sh_size, strTab + shdr->sh_name, static_cast<uintptr_t>(lmap->l_addr + shdr->sh_addr));
 			}
 
 			munmap(map, st.st_size);
@@ -143,7 +143,8 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 	m_pHandle = handle;
 	m_sPath.assign(svModelePath);
 
-	m_ExecutableCode = GetSectionByName(".text");
+	m_pExecutableSection = GetSectionByName(".text");
+	assert(m_pExecutableSection != nullptr);
 
 	return true;
 }
@@ -156,34 +157,34 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 //-----------------------------------------------------------------------------
 CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool bDecorated) const
 {
-	if (svTableName.empty())
-		return CMemory();
+	assert(!svTableName.empty());
 
-	CModule::ModuleSections_t readOnlyData = GetSectionByName(".rodata"), readOnlyRelocations = GetSectionByName(".data.rel.ro");
-	if (!readOnlyData.IsSectionValid() || !readOnlyRelocations.IsSectionValid())
-		return CMemory();
+	const Section_t *pReadOnlyData = GetSectionByName(".rodata"), *pReadOnlyRelocations = GetSectionByName(".data.rel.ro");
+
+	assert(pReadOnlyData != nullptr);
+	assert(pReadOnlyRelocations != nullptr);
 
 	std::string sDecoratedTableName(bDecorated ? svTableName : std::to_string(svTableName.length()) + std::string(svTableName));
 	std::string sMask(sDecoratedTableName.length() + 1, 'x');
 
-	CMemory typeInfoName = FindPattern(sDecoratedTableName.data(), sMask, nullptr, &readOnlyData);
+	CMemory typeInfoName = FindPattern(sDecoratedTableName.data(), sMask, nullptr, pReadOnlyData);
 	if (!typeInfoName)
-		return CMemory();
+		return DYNLIB_INVALID_MEMORY;
 
-	CMemory referenceTypeName = FindPattern(&typeInfoName, "xxxxxxxx", nullptr, &readOnlyRelocations); // Get reference to type name.
+	CMemory referenceTypeName = FindPattern(&typeInfoName, "xxxxxxxx", nullptr, pReadOnlyRelocations); // Get reference to type name.
 	if (!referenceTypeName)
-		return CMemory();
+		return DYNLIB_INVALID_MEMORY;
 
 	CMemory typeInfo = referenceTypeName.Offset(-0x8); // Offset -0x8 to typeinfo.
 
 	for (const auto& sectionName : { std::string_view(".data.rel.ro"), std::string_view(".data.rel.ro.local") })
 	{
-		CModule::ModuleSections_t section = GetSectionByName(sectionName);
-		if (!section.IsSectionValid())
+		const Section_t *pSection = GetSectionByName(sectionName);
+		if (!pSection)
 			continue;
 
 		CMemory reference;
-		while ((reference = FindPattern(&typeInfo, "xxxxxxxx", reference, &section))) // Get reference typeinfo in vtable
+		while ((reference = FindPattern(typeInfo, "xxxxxxxx", reference, pSection))) // Get reference typeinfo in vtable
 		{
 			if (reference.Offset(-0x8).GetValue<int64_t>() == 0) // Offset to this.
 			{
@@ -194,7 +195,7 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 		}
 	}
 
-	return CMemory();
+	return DYNLIB_INVALID_MEMORY;
 }
 
 //-----------------------------------------------------------------------------
@@ -204,11 +205,8 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const noexcept
 {
-	if (!m_pHandle)
-		return CMemory();
-
-	if (svFunctionName.empty())
-		return CMemory();
+	assert(m_pHandle != nullptr);
+	assert(!svFunctionName.empty());
 
 	return dlsym(m_pHandle, svFunctionName.data());
 }

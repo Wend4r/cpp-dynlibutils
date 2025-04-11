@@ -12,18 +12,19 @@
 #include <cstddef>
 #include <utility>
 
+#define DYNLIB_INVALID_MEMORY DynLibUtils::CMemory(nullptr)
+
 namespace DynLibUtils {
 
 class CMemory
 {
 public:
 	// Constructor ones.
-	CMemory() : m_ptr(0) {}
 	CMemory(const CMemory&) noexcept = default;
 	CMemory& operator= (const CMemory&) noexcept = default;
 	CMemory(CMemory&& other) noexcept : m_addr(std::exchange(other.m_addr, 0)) {}
 	CMemory(const std::uintptr_t addr) : m_addr(addr) {}
-	CMemory(const void* ptr) : m_ptr(ptr) {}
+	CMemory(const void* ptr = nullptr) : m_ptr(ptr) {}
 
 	/// Conversion operators.
 	operator const void*() const noexcept { return GetPointer(); }
@@ -45,9 +46,12 @@ public:
 	template<class T> T Get() const noexcept { return *UCast<T*>(); }
 	template<class T> T GetValue() const noexcept { return Get<T>(); }
 
+	// Checks methods.
+	bool IsValid() const noexcept { return GetPointer() != nullptr; }
+
+	// Offset methods.
 	CMemory Offset(std::ptrdiff_t offset) const noexcept { return m_addr + offset; }
 	CMemory& OffsetSelf(std::ptrdiff_t offset) noexcept { m_addr += offset; return *this; }
-
 	CMemory Deref(std::uintptr_t deref = 1) const
 	{
 		std::uintptr_t reference = m_addr;
@@ -60,7 +64,6 @@ public:
 
 		return reference;
 	}
-
 	CMemory& DerefSelf(int deref = 1)
 	{
 		while (deref--)
