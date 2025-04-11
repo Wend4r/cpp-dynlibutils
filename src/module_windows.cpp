@@ -128,6 +128,7 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 	m_sPath.assign(svModelePath);
 
 	m_pExecutableSection = GetSectionByName(".text");
+	assert(m_pExecutableSection != nullptr);
 
 	return true;
 }

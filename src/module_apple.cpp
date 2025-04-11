@@ -75,7 +75,8 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 //-----------------------------------------------------------------------------
 bool CModule::InitFromMemory(const CMemory pModuleMemory, bool bForce)
 {
-	assert(pModuleMemory.IsValid());
+	if (!pModuleMemory.IsValid())
+		return DYNLIB_INVALID_MEMORY;
 
 	if (!bForce && m_pHandle)
 		return false;
@@ -174,11 +175,9 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const noexcept
 {
 	assert(!svFunctionName.empty());
+	assert(m_pHandle != nullptr);
 
-	if (!m_pHandle)
-		return DYNLIB_INVALID_MEMORY;
-
-	return dlsym(m_pHandle, svFunctionName.data());
+	return m_pHandle ? DynLibUtils::CMemory(dlsym(m_pHandle, svFunctionName.data())) : DYNLIB_INVALID_MEMORY;
 }
 
 //-----------------------------------------------------------------------------

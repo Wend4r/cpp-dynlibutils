@@ -153,7 +153,9 @@ public:
 		const auto* pPattern = pPatternMem.RCast<const std::uint8_t*>();
 
 		const Section_t* pSection = pModuleSection ? pModuleSection : m_pExecutableSection;
-		assert(pSection && pSection->IsValid());
+
+		if (!pSection || !pSection->IsValid())
+			return DYNLIB_INVALID_MEMORY;
 
 		const std::uintptr_t base = pSection->m_pBase;
 		const std::size_t sectionSize = pSection->m_nSectionSize;
