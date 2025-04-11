@@ -20,15 +20,15 @@ class CMemory
 {
 public:
 	// Constructor ones.
-	CMemory(const CMemory&) noexcept = default;
-	CMemory& operator= (const CMemory&) noexcept = default;
-	CMemory(CMemory&& other) noexcept : m_addr(std::exchange(other.m_addr, 0)) {}
-	CMemory(const std::uintptr_t addr) : m_addr(addr) {}
-	CMemory(const void* ptr = nullptr) : m_ptr(ptr) {}
+	constexpr CMemory(const CMemory&) noexcept = default;
+	constexpr CMemory& operator= (const CMemory&) noexcept = default;
+	constexpr CMemory(CMemory&& other) noexcept : m_addr(std::move(other.m_addr)) {}
+	constexpr CMemory(const std::uintptr_t addr) : m_addr(addr) {}
+	constexpr CMemory(const void* ptr = nullptr) : m_ptr(ptr) {}
 
 	/// Conversion operators.
-	operator const void*() const noexcept { return GetPointer(); }
-	operator std::uintptr_t() const noexcept { return GetAddress(); }
+	constexpr operator const void*() const noexcept { return GetPointer(); }
+	constexpr operator std::uintptr_t() const noexcept { return GetAddress(); }
 
 	/// Compare operators.
 	bool operator==(const CMemory& comp) const noexcept { return m_addr == comp.m_addr; }
@@ -36,15 +36,15 @@ public:
 	bool operator<(const CMemory& comp) const noexcept { return m_addr < comp.m_addr; }
 
 	/// Cast methods.
-	template<typename T> T CCast() const noexcept { return (T)m_addr; }
-	template<typename T> T RCast() const noexcept { return reinterpret_cast<T>(m_addr); }
-	template<typename T> T UCast() const noexcept { union { T cptr; std::uintptr_t m_addr; } cast; return cast.m_addr = m_addr, cast.cptr; }
+	template<typename T> constexpr T CCast() const noexcept { return (T)m_addr; }
+	template<typename T> constexpr T RCast() const noexcept { return reinterpret_cast<T>(m_addr); }
+	template<typename T> constexpr T UCast() const noexcept { union { T cptr; std::uintptr_t m_addr; } cast; return cast.m_addr = m_addr, cast.cptr; }
 
 	/// Access methods.
-	const void* GetPointer() const noexcept { return m_ptr; }
-	std::ptrdiff_t GetAddress() const noexcept { return m_addr; }
-	template<class T> T Get() const noexcept { return *UCast<T*>(); }
-	template<class T> T GetValue() const noexcept { return Get<T>(); }
+	constexpr const void* GetPointer() const noexcept { return m_ptr; }
+	constexpr std::ptrdiff_t GetAddress() const noexcept { return m_addr; }
+	template<class T> constexpr T Get() const noexcept { return *UCast<T*>(); }
+	template<class T> constexpr T GetValue() const noexcept { return Get<T>(); }
 
 	// Checks methods.
 	bool IsValid() const noexcept { return GetPointer() != nullptr; }

@@ -45,7 +45,7 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 		const char* modulePath;
 	} dldata{ 0, sModuleName.c_str(), {} };
 
-	dl_iterate_phdr([](dl_phdr_info* info, size_t /* size */, void* data)
+	dl_iterate_phdr([](dl_phdr_info* info, std::size_t /* size */, void* data)
 	{
 		dl_data* dldata = reinterpret_cast<dl_data*>(data);
 
