@@ -12,21 +12,25 @@
 
 namespace DynLibUtils {
 
-class CVirtualTable
+#if __has_cpp_attribute(no_unique_address)
+[[no_unique_address]]
+#endif
+class alignas(8) CVirtualTable
 {
 public: // Types.
 	using CThis = CVirtualTable;
 
-public: // Constructor.
+public: // Constructors.
 	CVirtualTable() = default;
 	template<class T> CVirtualTable(T *pClass) { this = reinterpret_cast<CThis *>(pClass); }
 
 public: // Getters.
-	template<typename R> R GetMethod(ptrdiff_t nIndex) const { return reinterpret_cast<R>((*CMemory(this).RCast<void ***>())[nIndex]); }
+	template<typename R> R &GetMethod(std::ptrdiff_t nIndex) { return reinterpret_cast<R &>(&(*CMemory(this).RCast<void ***>())[nIndex]); }
+	template<typename R> R GetMethod(std::ptrdiff_t nIndex) const { return reinterpret_cast<R>((*CMemory(this).RCast<void ***>())[nIndex]); }
 
 public: // Call methods.
-	template<typename R, typename... Args> R CallMethod(ptrdiff_t nIndex, Args... args) { return this->GetMethod<R (*)(CThis *, Args...)>(nIndex)(this, args...); }
-	template<typename R, typename... Args> R CallMethod(ptrdiff_t nIndex, Args... args) const { return const_cast<CThis *>(this)->CallMethod(nIndex, args...); }
+	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) { return this->GetMethod<R (*)(CThis *, Args...)>(nIndex)(this, args...); }
+	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) const { return const_cast<CThis *>(this)->CallMethod(nIndex, args...); }
 }; // class CVirtualTable
 
 class VirtualTable final : public CVirtualTable
