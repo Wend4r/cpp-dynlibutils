@@ -42,6 +42,7 @@ public:
 	};
 
 	static constexpr std::size_t sm_nMaxPatternSize = 64;
+	static constexpr std::size_t sm_nMaxSimdBlocks = 1 << 6; // 64 blocks = 1024 bytes per chunk.
 
 	template<std::size_t N>
 	struct Pattern_t
@@ -75,7 +76,7 @@ public:
 	// Output : Pattern_t<N> (fixed-size array by N cells with mask and used size)
 	//-----------------------------------------------------------------------------
 	template<std::size_t N = sm_nMaxPatternSize>
-	[[always_inline]] [[nodiscard]] static inline constexpr Pattern_t<N> ParsePattern(const std::string_view svInput)
+	[[always_inline, nodiscard]] static inline constexpr Pattern_t<N> ParsePattern(const std::string_view svInput)
 	{
 		Pattern_t<N> result {};
 
@@ -89,7 +90,7 @@ public:
 		};
 
 		size_t n = 0;
-		size_t nOut = 0;
+		std::uint32_t nOut = 0;
 
 		while (n < svInput.length() && nOut < sm_nMaxPatternSize)
 		{
@@ -108,7 +109,7 @@ public:
 			{
 				auto nLeft = funcGetHexByte(svInput[n]), nRight = funcGetHexByte(svInput[n + 1]);
 
-				bool bIsValid = (nLeft && nRight);
+				bool bIsValid = nLeft && nRight;
 
 				assert(bIsValid && R"(Passing invalid characters. Allowed: <space> or pair: "0-9", "a-f", "A-F" or "?")");
 				if (!bIsValid)
@@ -133,7 +134,7 @@ public:
 		return result;
 	}
 	template<std::size_t N>
-	[[always_inline]] [[nodiscard]] static inline constexpr Pattern_t<N> ParsePatternString(const char (&szInput)[N])
+	[[always_inline, nodiscard]] static inline constexpr Pattern_t<N> ParsePatternString(const char (&szInput)[N])
 	{
 		return ParsePattern<N>(std::string_view(szInput, N - 1));
 	}
@@ -147,17 +148,16 @@ public:
 	// Output : CMemory
 	//-----------------------------------------------------------------------------
 	template<std::size_t N = sm_nMaxPatternSize>
-	[[always_inline]] inline constexpr CMemory FindPattern(const CMemory pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
+	[[always_inline, flatten, hot]] inline CMemory FindPattern(const CMemory pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
 	{
-		const auto* pPattern = pPatternMem.RCast<std::uint8_t*>();
+		const auto* pPattern = pPatternMem.RCast<const std::uint8_t*>();
 
 		const Section_t* pSection = pModuleSection ? pModuleSection : m_pExecutableSection;
-
 		assert(pSection && pSection->IsValid());
 
-		const uintptr_t base = pSection->m_pBase;
+		const std::uintptr_t base = pSection->m_pBase;
 		const std::size_t sectionSize = pSection->m_nSectionSize;
-		const std::size_t patternSize = svMask.length();
+		const std::size_t patternSize = svMask.size();
 
 		auto* pData = reinterpret_cast<std::uint8_t*>(base);
 		const auto* pEnd = pData + sectionSize - patternSize;
@@ -171,69 +171,61 @@ public:
 			pData = start;
 		}
 
-		// Prepare bitmasks for each 16-byte chunk of the pPattern.
-		constexpr std::uint8_t kMaskGroupSize = N / 4;
-		const std::uint8_t numMasks = static_cast<std::uint8_t>((patternSize + (kMaskGroupSize - 1)) / kMaskGroupSize);
+		constexpr std::size_t kSimdBytes = sizeof(__m128i); // 128 bits = 16 bytes.
+		constexpr std::size_t kMaxSimdBlocks = sm_nMaxSimdBlocks;
 
-		int masks[N] = {0}; // Support up to 1024-byte patterns.
+		const std::size_t numBlocks = (patternSize + (kSimdBytes - 1)) / kSimdBytes;
 
-		for (std::uint8_t i = 0; i < numMasks; ++i)
+		std::uint16_t bitMasks[kMaxSimdBlocks] = {};
+		__m128i patternChunks[kMaxSimdBlocks];
+
+		for (std::size_t i = 0; i < numBlocks; ++i)
 		{
-			const std::size_t offset = i * sizeof(__m128i);
-			const auto chunkSize = std::min<std::size_t>(patternSize - offset, sizeof(__m128i));
+			const std::size_t offset = i * kSimdBytes;
+			patternChunks[i] = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pPattern + offset));
 
-			for (std::uint8_t j = 0; j < chunkSize; ++j)
+			for (std::size_t j = 0; j < kSimdBytes; ++j)
 			{
-				if (svMask[offset + j] == 'x')
-				{
-					masks[i] |= (1 << j); // Set bit for bytes that must match.
-				}
+				const std::size_t idx = offset + j;
+				if (idx >= patternSize)
+					break;
+
+				if (svMask[idx] == 'x')
+					bitMasks[i] |= (1u << j);
 			}
 		}
 
-		const __m128i patternChunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pPattern));
-
 		for (; pData <= pEnd; ++pData)
 		{
-			// Prefetch next memory region to reduce cache misses.
 			_mm_prefetch(reinterpret_cast<const char*>(pData + 64), _MM_HINT_NTA);
 
-			// Compare first 16-byte block.
-			__m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData));
-			__m128i cmpMask = _mm_cmpeq_epi8(patternChunk, chunk);
+			bool bFound = true;
 
-			if ((_mm_movemask_epi8(cmpMask) & masks[0]) != masks[0])
-				continue;
-
-			// If pattern is longer than 16 bytes, verify remaining blocks:
+			for (std::size_t i = 0; i < numBlocks; ++i)
 			{
-				bool bFound = true;
+				const __m128i dataChunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData + i * kSimdBytes));
+				const __m128i cmp = _mm_cmpeq_epi8(dataChunk, patternChunks[i]);
+				const int mask = _mm_movemask_epi8(cmp);
 
-				for (std::uint8_t i = 1; i < numMasks; ++i)
+				if ((mask & bitMasks[i]) != bitMasks[i])
 				{
-					const __m128i chunkPattern = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pPattern + i * sizeof(__m128i)));
-					const __m128i chunkMemory = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData + i * sizeof(__m128i)));
-					const __m128i cmp = _mm_cmpeq_epi8(chunkPattern, chunkMemory);
-
-					if ((_mm_movemask_epi8(cmp) & masks[i]) != masks[i])
-					{
-						bFound = false;
-						break;
-					}
+					bFound = false;
+					break;
 				}
-
-				if (bFound)
-					return pData;
 			}
+
+			if (bFound)
+				return CMemory(pData);
 		}
 
 		return DYNLIB_INVALID_MEMORY;
 	}
-	template<std::size_t N> [[always_inline]] [[nodiscard]] inline constexpr CMemory FindPattern(Pattern_t<N>&& pattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
+
+	template<std::size_t N> [[always_inline, flatten, hot, nodiscard]] inline constexpr CMemory FindPattern(Pattern_t<N>&& pattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
 		return FindPattern<N>(CMemory(pattern.m_aBytes.data()), std::string_view(pattern.m_aMask.data()), pStartAddress, pModuleSection);
 	}
-	template<std::size_t N> [[always_inline]] [[nodiscard]] inline constexpr CMemory FindPatternString(const char (&szInput)[N], const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
+	template<std::size_t N> [[always_inline, flatten, hot, nodiscard]] inline constexpr CMemory FindPatternString(const char (&szInput)[N], const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
 		return FindPattern(ParsePatternString(szInput), pStartAddress, pModuleSection);
 	}
