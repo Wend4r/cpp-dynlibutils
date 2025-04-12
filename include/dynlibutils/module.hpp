@@ -20,11 +20,18 @@
 #include <string_view>
 #include <utility>
 
-namespace DynLibUtils {
+#ifdef __cpp_concepts
+#	include <concepts>
+#endif
 
-class CModule
+#ifdef __cpp_consteval
+#	define DYNLIB_COMPILE_TIME_EXPR consteval
+#else
+#	define DYNLIB_COMPILE_TIME_EXPR constexpr
+#endif
+
+namespace DynLibUtils
 {
-public:
 	struct Section_t
 	{
 		Section_t() noexcept : m_nSectionSize(0) {}
@@ -33,12 +40,13 @@ public:
 		Section_t(Section_t&& other) noexcept : m_nSectionSize(std::move(other.m_nSectionSize)), m_svSectionName(std::move(other.m_svSectionName)), m_pBase(std::move(other.m_pBase)) {}
 		Section_t(size_t nSectionSize, const std::string_view svSectionName, uintptr_t pSectionBase) : m_nSectionSize(nSectionSize), m_svSectionName(svSectionName), m_pBase(pSectionBase) {}
 
-		[[nodiscard]] bool IsValid() const noexcept { return m_pBase.IsValid(); }
+		[[nodiscard]]
+		bool IsValid() const noexcept { return m_pBase.IsValid(); }
 
 		std::size_t m_nSectionSize;     // Size of the section.
 		std::string m_svSectionName;    // Name of the section.
 		CMemory m_pBase;                // Start address of the section.
-	};
+	}; // struct Section_t
 
 	static constexpr std::size_t sm_nMaxPatternSize = 64;
 	static constexpr std::size_t sm_nMaxSimdBlocks = 1 << 6; // 64 blocks = 1024 bytes per chunk.
@@ -51,7 +59,65 @@ public:
 		std::size_t m_nSize = 0;
 		std::array<std::uint8_t, N> m_aBytes{};
 		std::array<char, N> m_aMask{};
+	}; // struct Pattern_t
+
+	// Concept for pattern callback.
+	// Signature: bool callback(std::size_t index, CMemory match)
+	// Returns:   false -> continue scanning.
+	//            true  -> stop scanning.
+#if defined(__cpp_concepts) && __cpp_concepts >= 201907L
+	template<typename T>
+	concept PatternCallback_t = requires(T func, std::size_t index, CMemory match)
+	{
+		{ func(index, match) } -> std::same_as<bool>;
 	};
+#else
+#	define PatternCallback_t typename
+#endif
+
+class CModule
+{
+private:
+	std::string m_sPath;
+	std::string m_sLastError;
+	std::vector<Section_t> m_vecSections;
+	const Section_t *m_pExecutableSection;
+	void* m_pHandle;
+
+public:
+	template<std::size_t N>
+	struct SignatureIterator_t : public Pattern_t<N>
+	{
+		using Base_t = Pattern_t<N>;
+
+		CModule* m_pModule;
+
+		constexpr SignatureIterator_t(Base_t&& pattern, CModule* module) : Base_t(std::move(pattern)), m_pModule(module) {}
+
+		[[nodiscard]]
+		CMemory operator()(const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
+		{
+			return m_pModule->FindPattern<N>(CMemory(Base_t::m_aBytes.data()), std::string_view(Base_t::m_aMask.data(), Base_t::m_nSize), pStart, pSection);
+		}
+
+		[[nodiscard]]
+		CMemory Offset(const std::ptrdiff_t offset, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
+		{
+			return operator()(pStart, pSection).Offset(offset);
+		}
+
+		[[nodiscard]]
+		CMemory Deref(const std::uintptr_t deref = 1, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
+		{
+			return operator()(pStart, pSection).Deref(deref);
+		}
+
+		[[nodiscard]]
+		CMemory FollowCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
+		{
+			return operator()(pStart, pSection).FollowNearCall(opcodeOffset, nextInstructionOffset);
+		}
+	}; // struct SignatureIterator_t
 
 	CModule() : m_pExecutableSection(nullptr), m_pHandle(nullptr) {}
 	~CModule();
@@ -71,13 +137,8 @@ public:
 
 protected: // Internal pattern methods.
 	template<std::size_t INDEX = 0, std::size_t N>
-	[[always_inline, nodiscard]] static inline 
-#ifdef __cpp_consteval
-	consteval 
-#else
-	constexpr 
-#endif
-	void ProcessPattern(const char (&szInput)[N], std::size_t& i, std::size_t& nIndex, std::array<std::uint8_t, N / 2>& aBytes, std::array<char, N / 2>& aMask)
+	[[always_inline, nodiscard]]
+	static inline DYNLIB_COMPILE_TIME_EXPR void ProcessPattern(const char (&szInput)[N], std::size_t& i, std::size_t& nIndex, std::array<std::uint8_t, N / 2>& aBytes, std::array<char, N / 2>& aMask)
 	{
 		constexpr auto funcIsHexDigit = [](char c) -> bool
 		{
@@ -150,13 +211,8 @@ public:
 	// Output : Pattern_t<N / 2> (fixed-size array by N cells with mask and used size)
 	//----------------------------------------------------------------------------
 	template<std::size_t N>
-	[[nodiscard]] static 
-#ifdef __cpp_consteval
-	consteval 
-#else
-	constexpr 
-#endif
-	Pattern_t<N / 2> ParsePatternString(const char (&szInput)[N])
+	[[always_inline, nodiscard]]
+	static inline DYNLIB_COMPILE_TIME_EXPR auto ParsePatternFromString(const char (&szInput)[N])
 	{
 		static_assert(N > 1, "Pattern cannot be empty");
 
@@ -169,10 +225,11 @@ public:
 		return result;
 	}
 
-	template<std::size_t N = sm_nMaxPatternSize>
-	[[nodiscard]] static Pattern_t<N> ParsePattern(const std::string_view svInput)
+	template<std::size_t N = sm_nMaxPatternSize / 2>
+	[[nodiscard]]
+	static auto ParsePattern(const std::string_view svInput)
 	{
-		Pattern_t<N> result {};
+		Pattern_t<N / 2> result {};
 
 		auto funcGetHexByte = [](char c) -> uint8_t
 		{
@@ -228,6 +285,20 @@ public:
 		return result;
 	}
 
+	template<std::size_t N>
+	[[always_inline, nodiscard]]
+	inline DYNLIB_COMPILE_TIME_EXPR auto CreateSignatureFromString(const char (&szInput)[N])
+	{
+		return SignatureIterator_t<N / 2>(ParsePatternFromString<N / 2>(szInput), this);
+	}
+
+	template<std::size_t N>
+	[[nodiscard]]
+	auto CreateSignature(const std::string_view svInput)
+	{
+		return SignatureIterator_t<N / 2>(ParsePattern<N / 2>(svInput), this);
+	}
+
 	//-----------------------------------------------------------------------------
 	// Purpose: Finds an array of bytes in process memory using SIMD instructions
 	// Input  : *pPattern
@@ -237,7 +308,8 @@ public:
 	// Output : CMemory
 	//-----------------------------------------------------------------------------
 	template<std::size_t N = sm_nMaxPatternSize>
-	[[always_inline, flatten, hot]] inline CMemory FindPattern(const CMemory pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
+	[[always_inline, flatten, hot]]
+	inline CMemory FindPattern(const CMemory pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
 	{
 		const auto* pPattern = pPatternMem.RCast<const std::uint8_t*>();
 
@@ -262,8 +334,8 @@ public:
 			pData = start;
 		}
 
-		constexpr std::size_t kSimdBytes = sizeof(__m128i); // 128 bits = 16 bytes.
-		constexpr std::size_t kMaxSimdBlocks = sm_nMaxSimdBlocks;
+		constexpr auto kSimdBytes = sizeof(__m128i); // 128 bits = 16 bytes.
+		constexpr auto kMaxSimdBlocks = std::max<std::size_t>(1ul, N);
 
 		const std::size_t numBlocks = (patternSize + (kSimdBytes - 1)) / kSimdBytes;
 
@@ -313,9 +385,41 @@ public:
 	}
 
 	template<std::size_t N>
-	[[nodiscard]] inline CMemory FindPattern(Pattern_t<N>&& pattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
+	[[nodiscard]]
+	inline CMemory FindPattern(const Pattern_t<N>&& pattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
 		return FindPattern<N>(CMemory(pattern.m_aBytes.data()), std::string_view(pattern.m_aMask.data()), pStartAddress, pModuleSection);
+	}
+
+	template<std::size_t N, PatternCallback_t FUNC>
+	std::size_t FindAllPatterns(const SignatureIterator_t<N>& sig, const FUNC& callback, CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
+	{
+		const Section_t* pSection = pModuleSection ? pModuleSection : m_pExecutableSection;
+
+		if (!pSection || !pSection->IsValid())
+			return 0;
+
+		const std::uintptr_t base = pSection->m_pBase;
+		const std::size_t sectionSize = pSection->m_nSectionSize;
+
+		std::uint8_t* pStart = pStartAddress ? pStartAddress.RCast<std::uint8_t*>() : reinterpret_cast<std::uint8_t*>(base);
+		const std::uint8_t* pEnd = reinterpret_cast<const std::uint8_t*>(base + sectionSize);
+
+		std::size_t foundLength = 0;
+
+		for (CMemory match; 
+		     (match = sig(pStart, pSection)).IsValid() && 
+		     pEnd <= match.RCast<const std::uint8_t*>(); 
+		     pStart = match.Offset(1).RCast<std::uint8_t*>()
+		)
+		{
+			if (callback(foundLength, match))
+				break;
+
+			foundLength++;
+		}
+
+		return foundLength;
 	}
 
 	[[nodiscard]] CMemory GetVirtualTableByName(const std::string_view svTableName, bool bDecorated = false) const;
@@ -337,14 +441,7 @@ public:
 
 protected:
 	void SaveLastError();
-
-private:
-	std::string m_sPath;
-	std::string m_sLastError;
-	std::vector<Section_t> m_vecSections;
-	const Section_t *m_pExecutableSection;
-	void* m_pHandle;
-};
+}; // class CModule
 
 } // namespace DynLibUtils
 
