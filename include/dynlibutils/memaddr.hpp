@@ -34,6 +34,14 @@ public:
 	bool operator!=(const CMemory& comp) const noexcept { return !operator==(comp); }
 	bool operator<(const CMemory& comp) const noexcept { return m_addr < comp.m_addr; }
 
+	// Addition and subtraction operators.
+	CMemory operator+(const CMemory& right) const noexcept { return m_addr + right.m_addr; }
+	CMemory operator-(const CMemory& right) const noexcept { return m_addr - right.m_addr; }
+	CMemory operator+(const std::uintptr_t right) const noexcept { return m_addr + right; }
+	CMemory operator-(const std::uintptr_t right) const noexcept { return m_addr - right; }
+	CMemory operator+(const void* right) const noexcept { return m_addr + reinterpret_cast<std::ptrdiff_t>(right); }
+	CMemory operator-(const void* right) const noexcept { return m_addr - reinterpret_cast<std::ptrdiff_t>(right); }
+
 	/// Cast methods.
 	template<typename T> constexpr T CCast() const noexcept { return (T)m_addr; }
 	template<typename T> constexpr T RCast() const noexcept { return reinterpret_cast<T>(m_addr); }
@@ -42,8 +50,8 @@ public:
 	/// Access methods.
 	constexpr const void* GetPointer() const noexcept { return m_ptr; }
 	constexpr std::ptrdiff_t GetAddress() const noexcept { return m_addr; }
-	template<class T> constexpr T Get() const noexcept { return *UCast<T*>(); }
-	template<class T> constexpr T GetValue() const noexcept { return Get<T>(); }
+	template<typename T> constexpr T GetRawAs() const noexcept { return CCast<T>(); }
+	template<typename T> constexpr T Get() const noexcept { return *GetRawAs<T*>(); }
 
 	// Checks methods.
 	bool IsValid() const noexcept { return GetPointer() != nullptr; }

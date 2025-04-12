@@ -163,7 +163,7 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 	{
 		// Check if we got a RTTI Object Locator for this reference by checking if -0xC is 1, which is the 'signature' field which is always 1 on x64.
 		// Check that offset of this vtable is 0
-		if (reference.Offset(-0xC).GetValue<int32_t>() == 1 && reference.Offset(-0x8).GetValue<int32_t>() == 0)
+		if (reference.Offset(-0xC).Get<int32_t>() == 1 && reference.Offset(-0x8).Get<int32_t>() == 0)
 		{
 			CMemory referenceOffset = reference.Offset(-0xC);
 			CMemory rttiCompleteObjectLocator = FindPattern(&referenceOffset, "xxxxxxxx", nullptr, pReadOnlyData);
