@@ -9,11 +9,81 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <string>
+#include <type_traits>
 #include <utility>
+
+#ifdef __cpp_concepts
+#	include <concepts>
+#endif
 
 #define DYNLIB_INVALID_MEMORY DynLibUtils::CMemory(nullptr)
 
 namespace DynLibUtils {
+
+#ifdef __cpp_concepts
+// Concept for string output handler.
+// Signature: void func(const std::string& sLine)
+template<typename FUNC>
+concept MemLineOutputFunc_t = requires(FUNC f, const std::string& sLine)
+{
+	{ f(sLine) } -> std::same_as<void>;
+};
+
+// Concept for byte-to-string conversion.
+// Signature: std::pair<std::string, bool> func(std::size_t index, std::uint8_t byte)
+// Returns (pair):  first  -> formatted byte string.
+//                  second -> true to force line break after current byte.
+template<typename FUNC>
+concept MemByteToStringFunc_t = requires(FUNC f, std::size_t index, std::uint8_t byte)
+{
+	{ f(index, byte) } -> std::convertible_to<std::pair<std::string, bool>>;
+};
+#else
+#define MemLineOutputFunc_t typename
+#define MemByteToStringFunc_t typename
+#endif
+
+template<typename T = std::uint8_t, std::size_t SIZE = sizeof(T), std::size_t CHARS = std::max<std::size_t>(2, SIZE)>
+inline char* MemToHexString_unsafe(char* pBuf, T val)
+{
+	std::uint8_t n = CHARS;
+
+	while (n)
+	{
+		--n;
+		pBuf[n] = "0123456789ABCDEF"[val & 0xFu];
+		val >>= 4u;
+
+	}
+
+	return pBuf;
+}
+
+template<typename T = std::uint8_t, std::size_t SIZE = sizeof(T), std::size_t CHARS = std::max<std::size_t>(2, SIZE)>
+inline std::string MemToHexString(T val)
+{
+	char sBuffer[CHARS];
+
+	return std::string(MemToHexString_unsafe<T, SIZE, CHARS>(sBuffer, val), CHARS); // Small-string optimization?
+}
+
+inline char MemToHumanChar(std::uint8_t byte)
+{
+	return ('~' <= byte && byte <= ' ') ? static_cast<char>(byte) : '.';
+}
+
+template<std::size_t BYTES_PER_LINE>
+inline constexpr auto g_funcDefaultMemToHex = [](std::size_t index, std::uint8_t byte) -> std::pair<std::string, bool>
+{
+	return std::make_pair(MemToHexString(byte), (index + 1) % BYTES_PER_LINE == 0);
+};
+
+template<std::size_t BYTES_PER_LINE = 8>
+inline constexpr auto GetDefaultMemToHexFunc()
+{
+	return g_funcDefaultMemToHex<BYTES_PER_LINE>;
+}
 
 class CMemory
 {
@@ -94,6 +164,58 @@ public:
 		m_addr = nextInstruction + relativeAddress;
 
 		return *this;
+	}
+
+	template<std::size_t BYTES_PER_LINE = 8, MemLineOutputFunc_t OUT_FUNC, MemByteToStringFunc_t TO_HEX_FUNC>
+	std::size_t Dump(std::size_t size, OUT_FUNC funcOutput, TO_HEX_FUNC funcToHex = GetDefaultMemToHexFunc<BYTES_PER_LINE>())
+	{
+		constexpr std::size_t kCharsPerLine = BYTES_PER_LINE * 2;
+
+		const auto* pData = RCast<const std::uint8_t*>();
+
+		std::string sLine;
+		sLine.reserve(128);
+
+		std::string sFormated;
+		sFormated.reserve(size);
+
+		std::size_t nOutputCount = 0;
+
+		for (std::size_t n = 0; n < size; ++n)
+		{
+			auto [sHex, bOutNextLine] = funcToHex(n, pData[n]);
+			sLine += sHex;
+
+			sFormated += MemToHumanChar(pData[n]);
+
+			if ((n + 1) % BYTES_PER_LINE)
+				sLine += ' ';
+
+			if (bOutNextLine)
+			{
+				sLine += " |" + sFormated + "|\n";
+				funcOutput(sLine);
+				sLine.clear();
+				sFormated.clear();
+
+				nOutputCount++;
+			}
+		}
+
+		// Handle final partial line.
+		if (!sLine.empty())
+		{
+			std::size_t pad = kCharsPerLine - (size % kCharsPerLine);
+
+			for (std::size_t i = 0; i < pad; ++i)
+				sLine += "   ";
+
+			sLine += " |" + sFormated + "|\n";
+			funcOutput(sLine);
+			nOutputCount++;
+		}
+
+		return nOutputCount++;
 	}
 
 protected:

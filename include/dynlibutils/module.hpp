@@ -15,13 +15,18 @@
 
 #include <array>
 #include <cassert>
-#include <vector>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 #ifdef __cpp_concepts
 #	include <concepts>
+#endif
+
+#ifdef __cpp_lib_debugging
+#	include <debugging>
 #endif
 
 #ifdef __cpp_consteval
@@ -68,8 +73,8 @@ struct Pattern_t
 
 // Concept for pattern callback.
 // Signature: bool callback(std::size_t index, CMemory match)
-// Returns:   false -> continue scanning.
-//            true  -> stop scanning.
+// Returns:   false -> stop scanning.
+//            true  -> continue scanning.
 #if defined(__cpp_concepts) && __cpp_concepts >= 201907L
 template<typename T>
 concept PatternCallback_t = requires(T func, std::size_t index, CMemory match)
@@ -260,16 +265,13 @@ public:
 			return Find(pStart, pSection);
 		}
 
-		[[nodiscard]] CMemory Find(const CMemory pStart, const Section_t* pSection) const
+		[[nodiscard]] CMemory Find(const CMemory pStart, const Section_t* pSection = nullptr) const
 		{
 			return m_pModule->FindPattern<SIZE>(CMemory(Base_t::m_aBytes.data()), std::string_view(Base_t::m_aMask.data(), Base_t::m_nSize), pStart, pSection);
 		}
-		[[nodiscard]] CMemory FindAndOffset(const std::ptrdiff_t offset, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const { return Find(pStart, pSection).Offset(offset); }
-		[[nodiscard]] CMemory FindAndOffsetFromSelf(const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const { return FindAndOffset(Base_t::m_nSize, pStart, pSection); }
-
-		[[nodiscard]] CMemory FindAndDeref(const std::uintptr_t deref = 1, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const { return Find(pStart, pSection).Deref(deref); }
-		[[nodiscard]]
-		CMemory FollowCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const { return Find(pStart, pSection).FollowNearCall(opcodeOffset, nextInstructionOffset); }
+		[[nodiscard]] CMemory OffsetAndFind(const std::ptrdiff_t offset, CMemory pStart, const Section_t* pSection = nullptr) const { return Find(pStart + offset, pSection); }
+		[[nodiscard]] CMemory OffsetFromSelfAndFind(const CMemory pStart, const Section_t* pSection = nullptr) const { return OffsetAndFind(Base_t::m_nSize, pStart, pSection); }
+		[[nodiscard]] CMemory DerefAndFind(const std::uintptr_t deref, CMemory pStart, const Section_t* pSection = nullptr) const { return Find(pStart.Deref(deref), pSection); }
 	}; // struct CSignatureView
 
 	CModule() : m_pExecutableSection(nullptr), m_pHandle(nullptr) {}
@@ -278,10 +280,10 @@ public:
 	CModule(const CModule&) = delete;
 	CModule& operator=(const CModule&) = delete;
 	CModule(CModule&& other) noexcept : m_sPath(std::move(other.m_sPath)), m_vecSections(std::move(other.m_vecSections)), m_pExecutableSection(std::move(other.m_pExecutableSection)), m_pHandle(std::move(other.m_pHandle)) {}
+	CModule(const CMemory pModuleMemory);
 	explicit CModule(const std::string_view svModuleName);
 	explicit CModule(const char* pszModuleName) : CModule(std::string_view(pszModuleName)) {}
 	explicit CModule(const std::string& sModuleName) : CModule(std::string_view(sModuleName)) {}
-	CModule(const CMemory pModuleMemory);
 
 	bool LoadFromPath(const std::string_view svModelePath, int flags);
 
@@ -428,20 +430,35 @@ public:
 		CMemory pIter = pStartAddress ? pStartAddress : pBase;
 		const CMemory pEnd = pBase + sectionSize;
 
-		std::size_t foundLength = 0;
+		std::size_t foundCount = 0;
 
-		for (CMemory pMatch = sig(pIter, pSection); 
-		     pMatch.IsValid() && 
-		     pMatch < pEnd; 
-		     pIter = sig.FindAndOffsetFromSelf(pMatch, pSection))
+		pIter = sig(pIter, pSection);
+
+		do
 		{
-			if (callback(foundLength, pMatch)) // foundLength = the index of found pattern now.
+			if (!callback(foundCount, pIter)) // foundCount = the index of found pattern now.
 				break;
 
-			++foundLength;
-		}
+			// Break the loop, stop this madness.
+			if (foundCount > 999)
+			{
+				std::fprintf(stderr, "%s%s:%d\n", 
+				                     ">> Detected an INFINITE LOOP!\n"
+				                     ">> Breaking from\n",
+				                     __FILE__, __LINE__);
 
-		return foundLength; // Count of the found patterns.
+#ifdef __cpp_lib_debugging
+				std::breakpoint();
+#endif
+
+				break;
+			}
+
+			++foundCount;
+		}
+		while((pIter = sig.OffsetFromSelfAndFind(pIter, pSection)).IsValid());
+
+		return foundCount; // Count of the found patterns.
 	}
 
 	[[nodiscard]] CMemory GetVirtualTableByName(const std::string_view svTableName, bool bDecorated = false) const;
