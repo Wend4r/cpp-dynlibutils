@@ -105,9 +105,6 @@ protected:
 }; // class CMemory
 
 template<typename T> 
-#if __has_cpp_attribute(no_unique_address)
-[[no_unique_address]] 
-#endif
 class CMemoryView : protected CMemory
 {
 public:

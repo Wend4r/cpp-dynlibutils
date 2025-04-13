@@ -26,9 +26,6 @@ public: // Callers.
 	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) { return GetMethod<R (*)(void *, Args...)>(nIndex)(m_pVTFs, args...); }
 	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) const { return const_cast<CThis *>(this)->CallMethod(nIndex, args...); }
 
-#if __has_cpp_attribute(no_unique_address)
-	[[no_unique_address]] 
-#endif
 	void **m_pVTFs;
 }; // class CVirtualTable
 
