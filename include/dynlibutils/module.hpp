@@ -241,7 +241,7 @@ private:
 
 public:
 	template<std::size_t SIZE>
-	class CSignatureIterator : public Pattern_t<SIZE>
+	class CSignatureView : public Pattern_t<SIZE>
 	{
 		using Base_t = Pattern_t<SIZE>;
 
@@ -249,10 +249,10 @@ public:
 		CModule* m_pModule;
 
 	public:
-		constexpr CSignatureIterator() : m_pModule(nullptr) {}
-		constexpr CSignatureIterator(CSignatureIterator&& moveFrom) : Base_t(std::move(moveFrom)), m_pModule(std::move(moveFrom.m_pModule)) {}
-		constexpr CSignatureIterator(const Base_t& pattern, CModule* module) : Base_t(pattern), m_pModule(module) {}
-		constexpr CSignatureIterator(Base_t&& pattern, CModule* module) : Base_t(std::move(pattern)), m_pModule(module) {}
+		constexpr CSignatureView() : m_pModule(nullptr) {}
+		constexpr CSignatureView(CSignatureView&& moveFrom) : Base_t(std::move(moveFrom)), m_pModule(std::move(moveFrom.m_pModule)) {}
+		constexpr CSignatureView(const Base_t& pattern, CModule* module) : Base_t(pattern), m_pModule(module) {}
+		constexpr CSignatureView(Base_t&& pattern, CModule* module) : Base_t(std::move(pattern)), m_pModule(module) {}
 
 		[[nodiscard]]
 		CMemory operator()(const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
@@ -260,35 +260,17 @@ public:
 			return Find(pStart, pSection);
 		}
 
-		CMemory Find(const CMemory pStart, const Section_t* pSection) const
+		[[nodiscard]] CMemory Find(const CMemory pStart, const Section_t* pSection) const
 		{
 			return m_pModule->FindPattern<SIZE>(CMemory(Base_t::m_aBytes.data()), std::string_view(Base_t::m_aMask.data(), Base_t::m_nSize), pStart, pSection);
 		}
+		[[nodiscard]] CMemory FindAndOffset(const std::ptrdiff_t offset, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const { return Find(pStart, pSection).Offset(offset); }
+		[[nodiscard]] CMemory FindAndOffsetFromSelf(const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const { return FindAndOffset(Base_t::m_nSize, pStart, pSection); }
 
+		[[nodiscard]] CMemory FindAndDeref(const std::uintptr_t deref = 1, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const { return Find(pStart, pSection).Deref(deref); }
 		[[nodiscard]]
-		CMemory Offset(const std::ptrdiff_t offset, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
-		{
-			return Find(pStart, pSection).Offset(offset);
-		}
-
-		[[nodiscard]]
-		CMemory OffsetSelf(const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
-		{
-			return Offset(Base_t::m_nSize, pStart, pSection);
-		}
-
-		[[nodiscard]]
-		CMemory Deref(const std::uintptr_t deref = 1, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
-		{
-			return Find(pStart, pSection).Deref(deref);
-		}
-
-		[[nodiscard]]
-		CMemory FollowCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
-		{
-			return Find(pStart, pSection).FollowNearCall(opcodeOffset, nextInstructionOffset);
-		}
-	}; // struct CSignatureIterator
+		CMemory FollowCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5, const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const { return Find(pStart, pSection).FollowNearCall(opcodeOffset, nextInstructionOffset); }
+	}; // struct CSignatureView
 
 	CModule() : m_pExecutableSection(nullptr), m_pHandle(nullptr) {}
 	~CModule();
@@ -312,7 +294,7 @@ public:
 	{
 		static_assert(N > 0, "Pattern size must be > 0");
 
-		return CSignatureIterator<N>(copyFrom, this);
+		return CSignatureView<N>(copyFrom, this);
 	}
 
 	template<std::size_t N>
@@ -321,7 +303,7 @@ public:
 	{
 		static_assert(N > 0, "Pattern size must be > 0");
 
-		return CSignatureIterator<N>(std::move(moveFrom), this);
+		return CSignatureView<N>(std::move(moveFrom), this);
 	}
 
 	//-----------------------------------------------------------------------------
@@ -433,7 +415,7 @@ public:
 	}
 
 	template<std::size_t SIZE, PatternCallback_t FUNC>
-	std::size_t FindAllPatterns(const CSignatureIterator<SIZE>& sig, const FUNC& callback, CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
+	std::size_t FindAllPatterns(const CSignatureView<SIZE>& sig, const FUNC& callback, CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
 		const Section_t* pSection = pModuleSection ? pModuleSection : m_pExecutableSection;
 
@@ -451,7 +433,7 @@ public:
 		for (CMemory pMatch = sig(pIter, pSection); 
 		     pMatch.IsValid() && 
 		     pMatch < pEnd; 
-		     pIter = sig.OffsetSelf(pMatch, pSection))
+		     pIter = sig.FindAndOffsetFromSelf(pMatch, pSection))
 		{
 			if (callback(foundLength, pMatch)) // foundLength = the index of found pattern now.
 				break;
