@@ -35,6 +35,8 @@
 #	define DYNLIB_COMPILE_TIME_EXPR constexpr
 #endif
 
+#define INVALID_DYNLIB_BYTE (~0)
+
 namespace DynLibUtils {
 
 struct Section_t
@@ -187,7 +189,7 @@ inline auto ParsePattern(const std::string_view svInput)
 		if ('a' <= c && c <= 'f') return 10 + (c - 'a');
 		if ('A' <= c && c <= 'F') return 10 + (c - 'A');
 
-		return 0;
+		return INVALID_DYNLIB_BYTE;
 	};
 
 	size_t n = 0;
@@ -210,7 +212,7 @@ inline auto ParsePattern(const std::string_view svInput)
 		{
 			auto nLeft = funcGetHexByte(svInput[n]), nRight = funcGetHexByte(svInput[n + 1]);
 
-			bool bIsValid = nLeft && nRight;
+			bool bIsValid = nLeft != INVALID_DYNLIB_BYTE && nRight != INVALID_DYNLIB_BYTE;
 
 			assert(bIsValid && R"(Passing invalid characters. Allowed: <space> or pair: "0-9", "a-f", "A-F" or "?")");
 			if (!bIsValid)
