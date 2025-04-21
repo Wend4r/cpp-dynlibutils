@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <cstddef>
+
 namespace DynLibUtils {
 
 class CVirtualTable
@@ -16,14 +18,14 @@ public: // Types.
 
 public: // Constructors.
 	CVirtualTable() : m_pVTFs(nullptr) {}
-	template<class T> CVirtualTable(T *pClass) : m_pVTFs(reinterpret_cast<void **>(pClass)) {}
+	template<class T> CVirtualTable(T *pClass) : m_pVTFs(*reinterpret_cast<void ***>(pClass)) {}
 
 public: // Getters.
 	template<typename R> R &GetMethod(std::ptrdiff_t nIndex) { return reinterpret_cast<R &>(m_pVTFs[nIndex]); }
 	template<typename R> R GetMethod(std::ptrdiff_t nIndex) const { return reinterpret_cast<R>(m_pVTFs[nIndex]); }
 
 public: // Callers.
-	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) { return GetMethod<R (*)(void *, Args...)>(nIndex)(m_pVTFs, args...); }
+	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) { return GetMethod<R (*)(void *, Args...)>(nIndex)(this, args...); }
 	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) const { return const_cast<CThis *>(this)->CallMethod(nIndex, args...); }
 
 	void **m_pVTFs;
