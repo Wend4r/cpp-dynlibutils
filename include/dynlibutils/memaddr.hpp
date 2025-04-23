@@ -93,7 +93,7 @@ public:
 	constexpr CMemory& operator=(const CMemory&) noexcept = default;
 	constexpr CMemory(CMemory&& other) noexcept : m_addr(std::move(other.m_addr)) {}
 	constexpr CMemory(const std::uintptr_t addr) : m_addr(addr) {}
-	constexpr CMemory(const void* ptr = nullptr) : m_ptr(ptr) {}
+	constexpr CMemory(void* ptr = nullptr) : m_ptr(ptr) {}
 
 	/// Conversion operators.
 	constexpr operator const void*() const noexcept { return GetPtr(); }
@@ -118,7 +118,7 @@ public:
 	template<typename PTR> constexpr PTR UCast() const noexcept { union { PTR cptr; std::uintptr_t addr; } cast; cast.addr = m_addr; return cast.cptr; }
 
 	/// Access methods.
-	constexpr const void* GetPtr() const noexcept { return m_ptr; }
+	constexpr void* GetPtr() const noexcept { return m_ptr; }
 	constexpr std::ptrdiff_t GetAddr() const noexcept { return m_addr; }
 	template<typename T> constexpr T &GetRef() const noexcept { return *RCast<T*>(); }
 	template<typename T> constexpr T Get() const { return GetRef<T>(); }
@@ -221,7 +221,7 @@ public:
 protected:
 	union
 	{
-		const void* m_ptr;
+		void* m_ptr;
 		std::uintptr_t m_addr;
 	};
 }; // class CMemory
