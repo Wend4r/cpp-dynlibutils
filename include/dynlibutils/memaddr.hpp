@@ -96,7 +96,7 @@ public:
 	constexpr CMemory(void* ptr = nullptr) : m_ptr(ptr) {}
 
 	/// Conversion operators.
-	constexpr operator const void*() const noexcept { return GetPtr(); }
+	constexpr operator void*() const noexcept { return GetPtr(); }
 	constexpr operator std::uintptr_t() const noexcept { return GetAddr(); }
 
 	/// Compare operators.
