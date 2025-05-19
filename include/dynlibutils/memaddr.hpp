@@ -227,7 +227,7 @@ protected:
 }; // class CMemory
 
 template<typename T> 
-class CMemoryView : protected CMemory
+class CMemoryView : public CMemory
 {
 public:
 	using CBase = CMemory;
@@ -249,9 +249,9 @@ public:
 	using CMemory::IsValid;
 
 	/// Cast methods (view ones).
-	constexpr T* CCast() const noexcept { return CBase::CCast<T*>(); }
-	constexpr T* RCast() const noexcept { return CBase::RCast<T*>(); }
-	constexpr T* UCast() const noexcept { CBase::UCast<T*>(); }
+	constexpr T* CCastView() const noexcept { return CBase::CCast<T*>(); }
+	constexpr T* RCastView() const noexcept { return CBase::RCast<T*>(); }
+	constexpr T* UCastView() const noexcept { return CBase::UCast<T*>(); }
 
 	/// Access methods (view ones).
 	constexpr T* GetPtr() const noexcept { return CBase::RCast<T*>(); }
@@ -260,7 +260,7 @@ public:
 	constexpr T Get() const { return GetRef(); }
 
 	/// Offset methods (view ones; operators are used).
-	CThis Offset(std::ptrdiff_t offset) const noexcept { return reinterpret_cast<CThis>(reinterpret_cast<T *>(CBase::m_addr) + offset); }
+	CThis Offset(std::ptrdiff_t offset) const noexcept { return CThis(reinterpret_cast<T *>(CBase::m_addr) + offset); }
 	CThis& OffsetSelf(std::ptrdiff_t offset) noexcept { reinterpret_cast<T *>(CBase::m_addr) += offset; return *this; }
 }; // class CMemoryView
 
