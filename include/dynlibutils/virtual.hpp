@@ -126,8 +126,7 @@ public: // Constructors.
 	template<class T> CVirtualTable(T *pClass) : CBase(*reinterpret_cast<void **>(pClass)) {}
 
 public: // Getters.
-	template<typename R> R &GetMethod(std::ptrdiff_t nIndex) { return CBase::Offset(nIndex).RCast<R &>(); }
-	template<typename R> R GetMethod(std::ptrdiff_t nIndex) const { return CBase::Offset(nIndex).RCast<R>(); }
+	template<typename R> R GetMethod(std::ptrdiff_t nIndex) const { return reinterpret_cast<R>(CBase::Offset(nIndex).GetPtr()); }
 
 public: // Callers.
 	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) { return GetMethod<R (*)(void *, Args...)>(nIndex)(this, args...); }
