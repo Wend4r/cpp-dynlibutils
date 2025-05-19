@@ -19,7 +19,7 @@
 namespace DynLibUtils {
 
 template<auto METHOD>
-constexpr std::ptrdiff_t GetVirtualMethodIndex() noexcept
+constexpr std::ptrdiff_t GetVirtualIndex() noexcept
 {
 	static_assert(std::is_member_function_pointer_v<decltype(METHOD)>, "Templated method must be a pointer-to-member-function");
 
