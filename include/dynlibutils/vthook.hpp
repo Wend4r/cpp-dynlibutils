@@ -85,7 +85,7 @@ public:
 	{
 		assert(!IsHooked());
 
-		m_vmpFn = pVTable.Offset(nIndex);
+		m_vmpFn = &pVTable.GetMethod<void *>(nIndex);
 		m_pOriginalFn = m_vmpFn.Deref();
 
 		HookImpl(pFn);
