@@ -70,7 +70,7 @@ inline std::string MemToHexString(T val)
 
 inline char MemToHumanChar(std::uint8_t byte)
 {
-	return ('~' <= byte && byte <= ' ') ? static_cast<char>(byte) : '.';
+	return (' ' <= byte && byte <= '~') ? static_cast<char>(byte) : '.';
 }
 
 template<std::size_t BYTES_PER_LINE>
@@ -210,7 +210,7 @@ public:
 			for (std::size_t i = 0; i < pad; ++i)
 				sLine += "   ";
 
-			sLine += " |" + sFormated + "|\n";
+			sLine += (pad ? "|" : " |") + sFormated + "|\n";
 			funcOutput(sLine);
 			nOutputCount++;
 		}
