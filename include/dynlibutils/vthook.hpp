@@ -9,6 +9,7 @@
 #pragma once
 
 #include "memaddr.hpp"
+#include "virtual.hpp"
 
 #if _WIN32
 #	define WIN32_LEAN_AND_MEAN
@@ -71,33 +72,47 @@ public:
 	VTHook() = default;
 	~VTHook() { Unhook(); }
 
-	bool IsHooked() const { return m_pOriginalFn.IsValid(); }
+	void Clear()
+	{
+		m_vmpFn = nullptr;
+		m_pOriginalFn = nullptr;
+	}
 
-	void Hook(CMemory pVTable, int index, T(*pFn)(C*, Args...))
+	bool IsHooked() const { return m_pOriginalFn.IsValid(); }
+	T Call(C* pThis, Args... args) { return m_pOriginalFn.RCast<T(*)(C*, Args...)>()(pThis, args...); }
+
+	void Hook(CVirtualTable pVTable, std::ptrdiff_t nIndex, T(*pFn)(C*, Args...))
 	{
 		assert(!IsHooked());
 
-		m_vmpFn = pVTable.Offset(index * sizeof(void*));
+		m_vmpFn = pVTable.Offset(nIndex);
 		m_pOriginalFn = m_vmpFn.Deref();
 
-		MemUnprotector unprotector(m_vmpFn);
-
-		*m_vmpFn.RCast<T(**)(C*, Args...)>() = pFn;
+		HookImpl(pFn);
 	}
 
 	void Unhook()
 	{
 		assert(IsHooked());
 
-		MemUnprotector unprotector(m_vmpFn);
-
-		*m_vmpFn.RCast<void**>() = m_pOriginalFn;
-
-		m_vmpFn = nullptr;
-		m_pOriginalFn = nullptr;
+		UnhookImpl();
+		Clear();
 	}
 
-	T Call(C* pThis, Args... args) { return m_pOriginalFn.RCast<T(*)(C*, Args...)>()(pThis, args...); }
+protected:
+	void HookImpl(T(*pfnTarget)(C*, Args...))
+	{
+		MemUnprotector unprotector(m_vmpFn);
+
+		*m_vmpFn.RCast<T(**)(C*, Args...)>() = pfnTarget;
+	}
+
+	void UnhookImpl()
+	{
+		MemUnprotector unprotector(m_vmpFn);
+
+		*m_vmpFn.RCast<void **>() = m_pOriginalFn;
+	}
 
 private:
 	CMemory m_vmpFn;
