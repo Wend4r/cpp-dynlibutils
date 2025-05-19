@@ -52,12 +52,18 @@ set(INCLUDE_DIRS
 	${INCLUDE_DIR}
 )
 
-if(LINUX)
-	list(APPEND SOURCE_FILES ${SOURCE_DIR}/module_linux.cpp)
-elseif(WINDOWS)
-	list(APPEND SOURCE_FILES ${SOURCE_DIR}/module_windows.cpp)
+if(WINDOWS)
+	list(APPEND SOURCE_FILES
+		${SOURCE_DIR}/windows/module.cpp
+	)
+elseif(LINUX)
+	list(APPEND SOURCE_FILES
+		${SOURCE_DIR}/linux/module.cpp
+	)
 elseif(MACOS)
-	list(APPEND SOURCE_FILES ${SOURCE_DIR}/module_apple.cpp)
+	list(APPEND SOURCE_FILES
+		${SOURCE_DIR}/apple/module.cpp
+	)
 else()
 	message(FATAL_ERROR "Unsupported platform")
 endif()
