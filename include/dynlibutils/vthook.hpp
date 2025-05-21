@@ -21,49 +21,58 @@
 #endif
 
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
 
 namespace DynLibUtils {
 
-class MemUnprotector
+using ProtectFlags_t = unsigned long;
+
+class VirtualUnprotector
 {
 public:
-	MemUnprotector(CMemory pAddress, size_t nLength = sizeof(void*))
+	VirtualUnprotector(void *pTarget, std::size_t nLength = sizeof(void*))
 	{
 #if _WIN32
-		VirtualProtect(pAddress, nLength, PAGE_EXECUTE_READWRITE, &m_nOldProtection);
-
-		m_pAddress = pAddress;
 		m_nLength = nLength;
+		m_pTarget = pTarget;
+
+		assert(VirtualProtect(pTarget, nLength, PAGE_EXECUTE_READWRITE, &m_nOldProtect));
 #else
-		long nPageSize = sysconf(_SC_PAGESIZE);
-		CMemory pPageStart = pAddress & ~(nPageSize - 1l);
-		CMemory pPageEnd = (pAddress + nLength + nPageSize - 1l) & ~(nPageSize - 1l);
-		size_t nAligned = pPageEnd - pPageStart;
+		long pageSize = sysconf(_SC_PAGESIZE);
 
-		mprotect(pPageStart, nAligned, PROT_READ | PROT_WRITE | PROT_EXEC);
+		assert(pageSize >= 0);
 
-		m_pAddress = pPageStart;
+		auto nPageSize = static_cast<std::uintptr_t>(pageSize);
+
+		auto pAddress = reinterpret_cast<std::uintptr_t>(pTarget);
+		CMemory        pPageStart = pAddress & ~(nPageSize - 1l);
+		std::uintptr_t pPageEnd = (pAddress + nLength + nPageSize - 1l) & ~(nPageSize - 1l);
+		auto nAligned = static_cast<std::size_t>(pPageEnd - pPageStart);
+
+		m_nOldProtect = PROT_READ;
 		m_nLength = nAligned;
-		m_nOldProtection = PROT_READ | PROT_WRITE; //TODO: Need to parse /proc/self/maps
+		m_pTarget = pPageStart;
+
+		assert(!mprotect(pPageStart, nAligned, PROT_READ | PROT_WRITE));
 #endif
 	}
 
-	~MemUnprotector()
+	~VirtualUnprotector()
 	{
 #if _WIN32
 		DWORD origProtect;
-		VirtualProtect(m_pAddress, m_nLength, m_nOldProtection, &origProtect);
+		assert(VirtualProtect(m_pTarget, m_nLength, m_nOldProtect, &origProtect));
 #else
-		mprotect(m_pAddress, m_nLength, m_nOldProtection);
+		assert(!mprotect(m_pTarget, m_nLength, m_nOldProtect));
 #endif
 	}
 
 private:
-	size_t m_nLength;
-	unsigned long m_nOldProtection;
-
-	CMemory m_pAddress;
-}; // class MemUnprotector
+	ProtectFlags_t m_nOldProtect;
+	std::size_t m_nLength;
+	CMemory m_pTarget;
+}; // class VirtualUnprotector
 
 template <typename T, typename C, typename ...Args>
 class VTHook
@@ -102,14 +111,14 @@ public:
 protected:
 	void HookImpl(T(*pfnTarget)(C*, Args...))
 	{
-		MemUnprotector unprotector(m_vmpFn);
+		VirtualUnprotector unprotect(m_vmpFn);
 
 		*m_vmpFn.RCast<T(**)(C*, Args...)>() = pfnTarget;
 	}
 
 	void UnhookImpl()
 	{
-		MemUnprotector unprotector(m_vmpFn);
+		VirtualUnprotector unprotect(m_vmpFn);
 
 		*m_vmpFn.RCast<void **>() = m_pOriginalFn;
 	}
