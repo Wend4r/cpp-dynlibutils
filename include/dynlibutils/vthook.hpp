@@ -78,9 +78,6 @@ template <typename T, typename C, typename ...Args>
 class VTHook
 {
 public:
-	VTHook() = default;
-	~VTHook() { Unhook(); }
-
 	void Clear()
 	{
 		m_vmpFn = nullptr;
