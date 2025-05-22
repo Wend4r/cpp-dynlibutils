@@ -37,7 +37,7 @@ public:
 		m_nLength = nLength;
 		m_pTarget = pTarget;
 
-		assert(VirtualProtect(pTarget, nLength, PAGE_EXECUTE_READWRITE, &m_nOldProtect));
+		bool bIsUnprotected = VirtualProtect(pTarget, nLength, PAGE_EXECUTE_READWRITE, &m_nOldProtect);
 #else
 		long pageSize = sysconf(_SC_PAGESIZE);
 
@@ -54,18 +54,22 @@ public:
 		m_nLength = nAligned;
 		m_pTarget = pPageStart;
 
-		assert(!mprotect(pPageStart, nAligned, PROT_READ | PROT_WRITE));
+		bool bIsUnprotected = !mprotect(pPageStart, nAligned, PROT_READ | PROT_WRITE);
 #endif
+
+		assert(bIsUnprotected);
 	}
 
 	~VirtualUnprotector()
 	{
 #if _WIN32
 		DWORD origProtect;
-		assert(VirtualProtect(m_pTarget, m_nLength, m_nOldProtect, &origProtect));
+		bool bIsUnprotected = VirtualProtect(m_pTarget, m_nLength, m_nOldProtect, &origProtect);
 #else
-		assert(!mprotect(m_pTarget, m_nLength, m_nOldProtect));
+		bool bIsUnprotected = !mprotect(m_pTarget, m_nLength, m_nOldProtect);
 #endif
+
+		assert(bIsUnprotected);
 	}
 
 private:
