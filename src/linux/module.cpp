@@ -16,8 +16,8 @@ using namespace DynLibUtils;
 
 CModule::~CModule()
 {
-	if (m_pHandle)
-		dlclose(m_pHandle);
+	if (IsValid())
+		dlclose(GetPtr());
 }
 
 //-----------------------------------------------------------------------------
@@ -28,7 +28,7 @@ CModule::~CModule()
 //-----------------------------------------------------------------------------
 bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 {
-	if (m_pHandle)
+	if (IsValid())
 		return false;
 
 	if (svModuleName.empty())
@@ -74,12 +74,10 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 //-----------------------------------------------------------------------------
 bool CModule::InitFromMemory(const CMemory pModuleMemory, bool bForce)
 {
-	assert(pModuleMemory.IsValid());
-
-	if (!pModuleMemory.IsValid())
+	if (IsValid() && !bForce)
 		return false;
 
-	if (!bForce && m_pHandle)
+	if (!pModuleMemory.IsValid())
 		return false;
 
 	Dl_info info;
@@ -143,7 +141,7 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 
 	close(fd);
 
-	m_pHandle = handle;
+	SetPtr(handle);
 	m_sPath.assign(svModelePath);
 
 	m_pExecutableSection = GetSectionByName(".text");
@@ -211,10 +209,7 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const noexcept
 {
-	assert(!svFunctionName.empty());
-	assert(m_pHandle != nullptr);
-
-	return m_pHandle ? DynLibUtils::CMemory(dlsym(m_pHandle, svFunctionName.data())) : DYNLIB_INVALID_MEMORY;
+	return CMemory((IsValid() && !svFunctionName.empty()) ? dlsym(GetPtr(), svFunctionName.data()) : nullptr);
 }
 
 //-----------------------------------------------------------------------------
@@ -222,7 +217,7 @@ CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetBase() const noexcept
 {
-	return static_cast<link_map*>(m_pHandle)->l_addr;
+	return RCast<link_map*>()->l_addr;
 }
 
 void CModule::SaveLastError()

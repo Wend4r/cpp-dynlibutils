@@ -15,7 +15,7 @@ using namespace DynLibUtils;
 // Purpose: constructor
 // Input  : szModuleName (without extension .dll/.so)
 //-----------------------------------------------------------------------------
-CModule::CModule(const std::string_view szModuleName) : m_pHandle(nullptr)
+CModule::CModule(const std::string_view szModuleName)
 {
 	InitFromName(szModuleName);
 }
@@ -24,7 +24,7 @@ CModule::CModule(const std::string_view szModuleName) : m_pHandle(nullptr)
 // Purpose: constructor
 // Input  : pModuleMemory
 //-----------------------------------------------------------------------------
-CModule::CModule(const CMemory pModuleMemory) : m_pHandle(nullptr)
+CModule::CModule(const CMemory pModuleMemory)
 {
 	InitFromMemory(pModuleMemory);
 }

@@ -16,8 +16,8 @@ namespace DynLibUtils {
 
 CModule::~CModule()
 {
-	if (m_pHandle)
-		FreeLibrary(reinterpret_cast<HMODULE>(m_pHandle));
+	if (IsValid())
+		FreeLibrary(RCast<HMODULE>());
 }
 
 static std::string GetModulePath(HMODULE hModule)
@@ -52,9 +52,10 @@ static std::string GetModulePath(HMODULE hModule)
 //-----------------------------------------------------------------------------
 bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 {
-	assert(!svModuleName.empty());
+	if (IsValid())
+		return false;
 
-	if (m_pHandle)
+	if (!svModuleName.empty())
 		return false;
 
 	std::string sModuleName(svModuleName);
@@ -82,9 +83,10 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 //-----------------------------------------------------------------------------
 bool CModule::InitFromMemory(const CMemory pModuleMemory, bool bForce)
 {
-	assert(pModuleMemory.IsValid());
+	if (IsValid() && !bForce)
+		return false;
 
-	if (!bForce && m_pHandle)
+	if (!pModuleMemory.IsValid())
 		return false;
 
 	MEMORY_BASIC_INFORMATION mbi;
@@ -124,7 +126,7 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 		m_vecSections.emplace_back(hCurrentSection.SizeOfRawData, reinterpret_cast<const char*>(hCurrentSection.Name), static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(handle) + hCurrentSection.VirtualAddress)); // Push back a struct with the section data.
 	}
 
-	m_pHandle = handle;
+	SetPtr(static_cast<void *>(handle));
 	m_sPath.assign(svModelePath);
 
 	m_pExecutableSection = GetSectionByName(".text");
@@ -184,12 +186,7 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const noexcept
 {
-	assert(!svFunctionName.empty());
-
-	if(!m_pHandle)
-		return DYNLIB_INVALID_MEMORY;
-
-	return GetProcAddress(reinterpret_cast<HMODULE>(m_pHandle), svFunctionName.data());
+	return CMemory((IsValid() && !svFunctionName.empty()) ? GetProcAddress(static_cast<HMODULE>(GetPtr()), svFunctionName.data()) : nullptr);
 }
 
 //-----------------------------------------------------------------------------
@@ -197,7 +194,7 @@ CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetBase() const noexcept
 {
-	return m_pHandle;
+	return *this;
 }
 
 void CModule::SaveLastError()

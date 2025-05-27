@@ -40,8 +40,8 @@ using namespace DynLibUtils;
 
 CModule::~CModule()
 {
-	if (m_pHandle)
-		dlclose(m_pHandle);
+	if (IsValid())
+		dlclose(GetPtr());
 }
 
 //-----------------------------------------------------------------------------
@@ -52,7 +52,7 @@ CModule::~CModule()
 //-----------------------------------------------------------------------------
 bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 {
-	if (m_pHandle)
+	if (IsValid())
 		return false;
 
 	if (svModuleName.empty())
@@ -63,9 +63,9 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 	if (!bExtension)
 		sModuleName.append(".dylib");
 
-	m_pHandle = dlopen(sModuleName.c_str(), RTLD_LAZY);
+	SetPtr(dlopen(sModuleName.c_str(), RTLD_LAZY));
 
-	return (m_pHandle != nullptr);
+	return IsValid();
 }
 
 //-----------------------------------------------------------------------------
@@ -75,10 +75,10 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 //-----------------------------------------------------------------------------
 bool CModule::InitFromMemory(const CMemory pModuleMemory, bool bForce)
 {
-	if (!pModuleMemory.IsValid())
-		return DYNLIB_INVALID_MEMORY;
+	if (IsValid() && !bForce)
+		return false;
 
-	if (!bForce && m_pHandle)
+	if (!pModuleMemory.IsValid())
 		return false;
 
 	Dl_info info;
@@ -102,13 +102,13 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 		return false;
 	}
 
-	m_pHandle = handle;
+	SetPtr(handle);
 	m_sPath = std::move(svModelePath);
 
 	if (m_vecSections.size())
 		return true;
 
-	const MachHeader* header = reinterpret_cast<const MachHeader*>(m_pHandle);
+	const auto* header = RCast<const MachHeader*>();
 
 /*
 	if (header->magic != MACH_MAGIC) {
@@ -138,7 +138,7 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 				m_vecSections.emplace_back(
 					section.size,
 					section.sectname,
-					reinterpret_cast<uintptr_t>(m_pHandle) + section.addr
+					GetAddr() + section.addr
 				);
 			}
 		}
@@ -174,10 +174,7 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const noexcept
 {
-	assert(!svFunctionName.empty());
-	assert(m_pHandle != nullptr);
-
-	return m_pHandle ? DynLibUtils::CMemory(dlsym(m_pHandle, svFunctionName.data())) : DYNLIB_INVALID_MEMORY;
+	return CMemory((IsValid() && !svFunctionName.empty()) ? dlsym(GetPtr(), svFunctionName.data()) : nullptr);
 }
 
 //-----------------------------------------------------------------------------
@@ -185,7 +182,7 @@ CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetBase() const noexcept
 {
-	return static_cast<dlopen_handle*>(m_pHandle)->module;
+	return CMemory(RCast<dlopen_handle*>()->module);
 }
 
 void CModule::SaveLastError()

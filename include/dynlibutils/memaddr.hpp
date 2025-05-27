@@ -90,8 +90,9 @@ class CMemory
 public:
 	// Constructor ones.
 	constexpr CMemory(const CMemory&) noexcept = default;
+	constexpr CMemory(CMemory&&) noexcept = default;
 	constexpr CMemory& operator=(const CMemory&) noexcept = default;
-	constexpr CMemory(CMemory&& other) noexcept : m_addr(std::move(other.m_addr)) {}
+	constexpr CMemory& operator=(CMemory&& other) noexcept = default;
 	constexpr CMemory(const std::uintptr_t addr) : m_addr(addr) {}
 	constexpr CMemory(void* ptr = nullptr) : m_ptr(ptr) {}
 
@@ -117,11 +118,16 @@ public:
 	template<typename PTR> constexpr PTR RCast() const noexcept { return reinterpret_cast<PTR>(m_addr); }
 	template<typename PTR> constexpr PTR UCast() const noexcept { union { PTR cptr; std::uintptr_t addr; } cast; cast.addr = m_addr; return cast.cptr; }
 
-	/// Access methods.
+	/// Access methods (getters).
 	constexpr void* GetPtr() const noexcept { return m_ptr; }
 	constexpr std::ptrdiff_t GetAddr() const noexcept { return m_addr; }
 	template<typename T> constexpr T &GetRef() const noexcept { return *RCast<T*>(); }
 	template<typename T> constexpr T Get() const { return GetRef<T>(); }
+
+	/// Access methods (setters).
+	constexpr void* SetPtr(void* pNew) noexcept { return m_ptr = pNew; }
+	constexpr std::ptrdiff_t SetAddr(std::ptrdiff_t nNew) noexcept { return m_addr = nNew; }
+	template<typename T> constexpr T &Set(const T &other) noexcept { return &GetRef<T>() = other; }
 
 	// Checks methods.
 	bool IsValid() const noexcept { return GetPtr() != nullptr; }
@@ -131,7 +137,7 @@ public:
 	CMemory& OffsetSelf(const std::ptrdiff_t offset) noexcept { m_addr += offset; return *this; }
 
 	// Multi-level dereferencing methods.
-	CMemory Deref(std::uintptr_t deref = 1, std::ptrdiff_t offset = 0) const
+	CMemory Deref(std::uintptr_t deref = 1, std::ptrdiff_t offset = 0) const noexcept
 	{
 		std::uintptr_t base = m_addr;
 
@@ -142,12 +148,12 @@ public:
 
 		return base;
 	}
-	CMemory& DerefSelf(int deref = 1, std::ptrdiff_t offset = 0) { while (m_addr && deref--) m_addr = *reinterpret_cast<std::uintptr_t*>(m_addr + offset); return *this; }
+	CMemory& DerefSelf(int deref = 1, std::ptrdiff_t offset = 0) noexcept { while (m_addr && deref--) m_addr = *reinterpret_cast<std::uintptr_t*>(m_addr + offset); return *this; }
 
-	CMemory FollowNearCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5) const { return ResolveRelativeAddress(opcodeOffset, nextInstructionOffset); }
-	CMemory& FollowNearCallSelf(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5) { return ResolveRelativeAddressSelf(opcodeOffset, nextInstructionOffset); }
+	CMemory FollowNearCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5) const noexcept { return ResolveRelativeAddress(opcodeOffset, nextInstructionOffset); }
+	CMemory& FollowNearCallSelf(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5) noexcept { return ResolveRelativeAddressSelf(opcodeOffset, nextInstructionOffset); }
 
-	CMemory ResolveRelativeAddress(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4) const
+	CMemory ResolveRelativeAddress(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4) const noexcept
 	{
 		const std::uintptr_t skipRegister = m_addr + registerOffset;
 		const std::uintptr_t nextInstruction = m_addr + nextInstructionOffset;
@@ -155,7 +161,7 @@ public:
 
 		return nextInstruction + relativeAddress;
 	}
-	CMemory& ResolveRelativeAddressSelf(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4)
+	CMemory& ResolveRelativeAddressSelf(const std::ptrdiff_t registerOffset = 0x0, const std::ptrdiff_t nextInstructionOffset = 0x4) noexcept
 	{
 		const std::uintptr_t skipRegister = m_addr + registerOffset;
 		const std::uintptr_t nextInstruction = m_addr + nextInstructionOffset;
@@ -245,8 +251,6 @@ public:
 	CMemory operator-(const std::ptrdiff_t right) const noexcept { return Offset(-right); }
 	CMemory operator+(const CMemory right) const noexcept { return Offset(static_cast<std::ptrdiff_t>(right.GetAddr())); }
 	CMemory operator-(const CMemory right) const noexcept { return Offset(static_cast<std::ptrdiff_t>(right.GetAddr())); }
-
-	using CMemory::IsValid;
 
 	/// Cast methods (view ones).
 	constexpr T* CCastView() const noexcept { return CBase::CCast<T*>(); }

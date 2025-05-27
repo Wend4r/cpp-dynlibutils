@@ -237,15 +237,8 @@ inline auto ParsePattern(const std::string_view svInput)
 	return result;
 }
 
-class CModule
+class CModule : public CMemory
 {
-private:
-	std::string m_sPath;
-	std::string m_sLastError;
-	std::vector<Section_t> m_vecSections;
-	const Section_t *m_pExecutableSection;
-	void* m_pHandle;
-
 public:
 	template<std::size_t SIZE>
 	class CSignatureView : public Pattern_t<SIZE>
@@ -261,6 +254,8 @@ public:
 		constexpr CSignatureView(const Base_t& pattern, CModule* module) : Base_t(pattern), m_pModule(module) {}
 		constexpr CSignatureView(Base_t&& pattern, CModule* module) : Base_t(std::move(pattern)), m_pModule(module) {}
 
+		bool IsValid() const { return m_pModule && m_pModule->IsValid(); }
+
 		[[nodiscard]]
 		CMemory operator()(const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
 		{
@@ -274,14 +269,22 @@ public:
 		[[nodiscard]] CMemory OffsetAndFind(const std::ptrdiff_t offset, CMemory pStart, const Section_t* pSection = nullptr) const { return Find(pStart + offset, pSection); }
 		[[nodiscard]] CMemory OffsetFromSelfAndFind(const CMemory pStart, const Section_t* pSection = nullptr) const { return OffsetAndFind(Base_t::m_nSize, pStart, pSection); }
 		[[nodiscard]] CMemory DerefAndFind(const std::uintptr_t deref, CMemory pStart, const Section_t* pSection = nullptr) const { return Find(pStart.Deref(deref), pSection); }
-	}; // struct CSignatureView
+	}; // class CSignatureView<SIZE>
 
-	CModule() : m_pExecutableSection(nullptr), m_pHandle(nullptr) {}
+private:
+	std::string m_sPath;
+	std::string m_sLastError;
+	std::vector<Section_t> m_vecSections;
+
+	const Section_t *m_pExecutableSection;
+
+public:
+	CModule() : m_pExecutableSection(nullptr) {}
 	~CModule();
 
 	CModule(const CModule&) = delete;
 	CModule& operator=(const CModule&) = delete;
-	CModule(CModule&& other) noexcept : m_sPath(std::move(other.m_sPath)), m_vecSections(std::move(other.m_vecSections)), m_pExecutableSection(std::move(other.m_pExecutableSection)), m_pHandle(std::move(other.m_pHandle)) {}
+	CModule(CModule&& other) noexcept = default;
 	CModule(const CMemory pModuleMemory);
 	explicit CModule(const std::string_view svModuleName);
 	explicit CModule(const char* pszModuleName) : CModule(std::string_view(pszModuleName)) {}
@@ -466,7 +469,7 @@ public:
 	[[nodiscard]] CMemory GetVirtualTableByName(const std::string_view svTableName, bool bDecorated = false) const;
 	[[nodiscard]] CMemory GetFunctionByName(const std::string_view svFunctionName) const noexcept;
 
-	[[nodiscard]] void* GetHandle() const noexcept { return m_pHandle; }
+	[[nodiscard]] void* GetHandle() const noexcept { return GetPtr(); }
 	[[nodiscard]] CMemory GetBase() const noexcept;
 	[[nodiscard]] std::string_view GetPath() const { return m_sPath; }
 	[[nodiscard]] std::string_view GetLastError() const { return m_sLastError; }
@@ -483,6 +486,13 @@ public:
 protected:
 	void SaveLastError();
 }; // class CModule
+
+class Module final : CModule
+{
+public:
+	using CBase = CModule;
+	using CBase::CBase;
+};
 
 } // namespace DynLibUtils
 
