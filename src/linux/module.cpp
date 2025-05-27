@@ -188,7 +188,7 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 			continue;
 
 		CMemory reference;
-		while ((reference = FindPattern(typeInfo, "xxxxxxxx", reference, pSection))) // Get reference typeinfo in vtable
+		while ((reference = FindPattern(&typeInfo, "xxxxxxxx", reference, pSection))) // Get reference typeinfo in vtable
 		{
 			if (reference.Offset(-0x8).Get<int64_t>() == 0) // Offset to this.
 			{
