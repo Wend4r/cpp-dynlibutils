@@ -39,18 +39,14 @@
 
 namespace DynLibUtils {
 
-struct Section_t
+struct Section_t : public CMemory // Start address of the section.
 {
 	// Constructors.
-	Section_t(size_t nSectionSize = 0, const std::string_view& svSectionName = {}, CMemory pSectionBase = nullptr) noexcept : m_nSectionSize(nSectionSize), m_svSectionName(svSectionName), m_pBase(pSectionBase) {} // Default one.
-	Section_t(Section_t&& other) noexcept : m_nSectionSize(std::move(other.m_nSectionSize)), m_svSectionName(std::move(other.m_svSectionName)), m_pBase(std::move(other.m_pBase)) {}
-
-	[[nodiscard]]
-	bool IsValid() const noexcept { return m_pBase.IsValid(); }
+	Section_t(CMemory pSectionBase = nullptr, size_t nSectionSize = 0, const std::string_view& svSectionName = {}) noexcept : CMemory(pSectionBase), m_nSectionSize(nSectionSize), m_svSectionName(svSectionName) {} // Default one.
+	Section_t(Section_t&& other) noexcept = default;
 
 	std::size_t m_nSectionSize;     // Size of the section.
 	std::string m_svSectionName;    // Name of the section.
-	CMemory m_pBase;                // Start address of the section.
 }; // struct Section_t
 
 static constexpr std::size_t s_nDefaultPatternSize = 128;
@@ -332,7 +328,7 @@ public:
 		if (!pSection || !pSection->IsValid())
 			return DYNLIB_INVALID_MEMORY;
 
-		const std::uintptr_t base = pSection->m_pBase;
+		const std::uintptr_t base = pSection->GetAddr();
 		const std::size_t sectionSize = pSection->m_nSectionSize;
 		const std::size_t patternSize = svMask.size();
 
@@ -429,7 +425,7 @@ public:
 		if (!pSection || !pSection->IsValid())
 			return 0;
 
-		const CMemory pBase = pSection->m_pBase;
+		const CMemory pBase = *pSection;
 		const std::size_t sectionSize = pSection->m_nSectionSize;
 
 		CMemory pIter = pStartAddress ? pStartAddress : pBase;

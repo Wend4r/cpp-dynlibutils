@@ -116,14 +116,14 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 	}
 
 	IMAGE_DOS_HEADER* pDOSHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(handle);
-	IMAGE_NT_HEADERS64* pNTHeaders = reinterpret_cast<IMAGE_NT_HEADERS64*>(reinterpret_cast<uintptr_t>(handle) + pDOSHeader->e_lfanew);
+	IMAGE_NT_HEADERS64* pNTHeaders = reinterpret_cast<IMAGE_NT_HEADERS64*>(reinterpret_cast<std::uintptr_t>(handle) + pDOSHeader->e_lfanew);
 
 	const IMAGE_SECTION_HEADER* hSection = IMAGE_FIRST_SECTION(pNTHeaders); // Get first image section.
 
 	for (WORD i = 0; i < pNTHeaders->FileHeader.NumberOfSections; ++i) // Loop through the sections.
 	{
 		const IMAGE_SECTION_HEADER& hCurrentSection = hSection[i]; // Get current section.
-		m_vecSections.emplace_back(hCurrentSection.SizeOfRawData, reinterpret_cast<const char*>(hCurrentSection.Name), static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(handle) + hCurrentSection.VirtualAddress)); // Push back a struct with the section data.
+		m_vecSections.emplace_back(static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(handle) + hCurrentSection.VirtualAddress), hCurrentSection.SizeOfRawData, reinterpret_cast<const char*>(hCurrentSection.Name)); // Push back a struct with the section data.
 	}
 
 	SetPtr(static_cast<void *>(handle));
@@ -158,7 +158,7 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 		return DYNLIB_INVALID_MEMORY;
 
 	CMemory rttiTypeDescriptor = typeDescriptorName.Offset(-0x10);
-	uintptr_t rttiTDRva = rttiTypeDescriptor.GetAddr() - GetBase().GetAddr(); // The RTTI gets referenced by a 4-Byte RVA address. We need to scan for that address.
+	std::uintptr_t rttiTDRva = rttiTypeDescriptor.GetAddr() - GetBase().GetAddr(); // The RTTI gets referenced by a 4-Byte RVA address. We need to scan for that address.
 
 	CMemory reference;
 	while ((reference = FindPattern(&rttiTDRva, "xxxx", reference, pReadOnlyData))) // Get reference typeinfo in vtable

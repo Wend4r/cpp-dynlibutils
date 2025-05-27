@@ -123,16 +123,16 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 		if (map != MAP_FAILED)
 		{
 			ElfW(Ehdr)* ehdr = static_cast<ElfW(Ehdr)*>(map);
-			ElfW(Shdr)* shdrs = reinterpret_cast<ElfW(Shdr)*>(reinterpret_cast<uintptr_t>(ehdr) + ehdr->e_shoff);
-			const char* strTab = reinterpret_cast<const char*>(reinterpret_cast<uintptr_t>(ehdr) + shdrs[ehdr->e_shstrndx].sh_offset);
+			ElfW(Shdr)* shdrs = reinterpret_cast<ElfW(Shdr)*>(reinterpret_cast<std::uintptr_t>(ehdr) + ehdr->e_shoff);
+			const char* strTab = reinterpret_cast<const char*>(reinterpret_cast<std::uintptr_t>(ehdr) + shdrs[ehdr->e_shstrndx].sh_offset);
 
 			for (auto i = 0; i < ehdr->e_shnum; ++i) // Loop through the sections.
 			{
-				ElfW(Shdr)* shdr = reinterpret_cast<ElfW(Shdr)*>(reinterpret_cast<uintptr_t>(shdrs) + i * ehdr->e_shentsize);
+				ElfW(Shdr)* shdr = reinterpret_cast<ElfW(Shdr)*>(reinterpret_cast<std::uintptr_t>(shdrs) + i * ehdr->e_shentsize);
 				if (*(strTab + shdr->sh_name) == '\0')
 					continue;
 
-				m_vecSections.emplace_back(shdr->sh_size, strTab + shdr->sh_name, static_cast<uintptr_t>(lmap->l_addr + shdr->sh_addr));
+				m_vecSections.emplace_back(static_cast<std::uintptr_t>(lmap->l_addr + shdr->sh_addr), shdr->sh_size, strTab + shdr->sh_name);
 			}
 
 			munmap(map, st.st_size);

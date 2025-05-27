@@ -136,9 +136,9 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 			for (uint32_t j = 0; j < seg->nsects; ++j) {
 				const MachSection& section = sec[j];
 				m_vecSections.emplace_back(
+					GetAddr() + section.addr,
 					section.size,
-					section.sectname,
-					GetAddr() + section.addr
+					section.sectname
 				);
 			}
 		}
