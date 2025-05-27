@@ -156,10 +156,10 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 		return DYNLIB_INVALID_MEMORY;
 
 	CMemory rttiTypeDescriptor = typeDescriptorName.Offset(-0x10);
-	const uintptr_t rttiTDRva = rttiTypeDescriptor - GetBase(); // The RTTI gets referenced by a 4-Byte RVA address. We need to scan for that address.
+	uintptr_t rttiTDRva = rttiTypeDescriptor.GetAddr() - GetBase().GetAddr(); // The RTTI gets referenced by a 4-Byte RVA address. We need to scan for that address.
 
 	CMemory reference;
-	while ((reference = FindPattern(rttiTDRva, "xxxx", reference, pReadOnlyData))) // Get reference typeinfo in vtable
+	while ((reference = FindPattern(&rttiTDRva, "xxxx", reference, pReadOnlyData))) // Get reference typeinfo in vtable
 	{
 		// Check if we got a RTTI Object Locator for this reference by checking if -0xC is 1, which is the 'signature' field which is always 1 on x64.
 		// Check that offset of this vtable is 0
