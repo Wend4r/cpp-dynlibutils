@@ -122,7 +122,8 @@ public: // Types.
 
 public: // Constructors.
 	CVirtualTable() : m_pVTFs(nullptr) {}
-	template<class T> CVirtualTable(T *pClass) : m_pVTFs(*reinterpret_cast<void ***>(pClass)) {}
+	CVirtualTable(void *pClass) : m_pVTFs(*reinterpret_cast<void ***>(pClass)) {}
+	CVirtualTable(CMemory pVTFs) : m_pVTFs(pVTFs.RCast<void **>()) {}
 
 public: // Getters.
 	template<typename R> R &GetMethod(std::ptrdiff_t nIndex) { return reinterpret_cast<R &>(m_pVTFs[nIndex]); }
