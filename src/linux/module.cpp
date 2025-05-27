@@ -158,7 +158,8 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 //-----------------------------------------------------------------------------
 CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool bDecorated) const
 {
-	assert(!svTableName.empty());
+	if (svTableName.empty())
+		return DYNLIB_INVALID_MEMORY;
 
 	const Section_t *pReadOnlyData = GetSectionByName(".rodata"), *pReadOnlyRelocations = GetSectionByName(".data.rel.ro");
 

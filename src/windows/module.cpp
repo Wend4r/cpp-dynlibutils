@@ -55,7 +55,7 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 	if (IsValid())
 		return false;
 
-	if (!svModuleName.empty())
+	if (svModuleName.empty())
 		return false;
 
 	std::string sModuleName(svModuleName);
@@ -143,8 +143,9 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 //-----------------------------------------------------------------------------
 CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool bDecorated) const
 {
-	assert(!svTableName.empty());
-	
+	if (svTableName.empty())
+		return DYNLIB_INVALID_MEMORY;
+
 	const Section_t *pRunTimeData = GetSectionByName(".data"), *pReadOnlyData = GetSectionByName(".rdata");
 
 	assert(pRunTimeData != nullptr);
