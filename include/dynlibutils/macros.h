@@ -1,3 +1,7 @@
+// DynLibUtils
+// Copyright (C) 2023-2025 Vladimir Ezhikov (Wend4r) & Borys Komashchenko (Phoenix)
+// Licensed under the MIT license. See LICENSE file in the project root for details.
+
 #ifndef DYNLIBUTILS_MACROS_H
 #define DYNLIBUTILS_MACROS_H
 

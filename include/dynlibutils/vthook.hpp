@@ -1,6 +1,6 @@
 //
 // DynLibUtils
-// Copyright (C) 2023-2025 Vladimir Ezhikov (Wend4r) & komashchenko (Phoenix)
+// Copyright (C) 2023-2025 Vladimir Ezhikov (Wend4r) & Borys Komashchenko (Phoenix)
 // Licensed under the MIT license. See LICENSE file in the project root for details.
 //
 
