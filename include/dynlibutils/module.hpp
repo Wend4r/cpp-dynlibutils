@@ -319,9 +319,9 @@ public:
 	//-----------------------------------------------------------------------------
 	template<std::size_t SIZE = (s_nDefaultPatternSize - 1) / 2>
 	[[always_inline, flatten, hot]]
-	inline CMemory FindPattern(const CMemory pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
+	inline CMemory FindPattern(const CMemoryView<std::uint8_t> pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
 	{
-		const auto* pPattern = pPatternMem.RCast<const std::uint8_t*>();
+		const auto* pPattern = pPatternMem.RCastView();
 
 		const Section_t* pSection = pModuleSection ? pModuleSection : m_pExecutableSection;
 
@@ -407,17 +407,18 @@ public:
 	[[nodiscard]]
 	inline CMemory FindPattern(const Pattern_t<SIZE>& copyPattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
-		return FindPattern<SIZE>(CMemory(copyPattern.m_aBytes.data()), std::string_view(copyPattern.m_aMask.data(), copyPattern.m_nSize), pStartAddress, pModuleSection);
+		return FindPattern<SIZE>(copyPattern.m_aBytes.data(), std::string_view(copyPattern.m_aMask.data(), copyPattern.m_nSize), pStartAddress, pModuleSection);
 	}
 
 	template<std::size_t SIZE>
 	[[nodiscard]]
 	inline CMemory FindPattern(Pattern_t<SIZE>&& movePattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
-		return FindPattern<SIZE>(CMemory(std::move(movePattern.m_aBytes).data()), std::string_view(std::move(movePattern.m_aMask).data(), std::move(movePattern.m_nSize)), pStartAddress, pModuleSection);
+		return FindPattern<SIZE>(std::move(movePattern.m_aBytes).data(), std::string_view(std::move(movePattern.m_aMask).data(), std::move(movePattern.m_nSize)), pStartAddress, pModuleSection);
 	}
 
 	template<std::size_t SIZE, PatternCallback_t FUNC>
+	[[nodiscard]]
 	std::size_t FindAllPatterns(const CSignatureView<SIZE>& sig, const FUNC& callback, CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
 		const Section_t* pSection = pModuleSection ? pModuleSection : m_pExecutableSection;
@@ -429,7 +430,6 @@ public:
 		const std::size_t sectionSize = pSection->m_nSectionSize;
 
 		CMemory pIter = pStartAddress ? pStartAddress : pBase;
-		const CMemory pEnd = pBase + sectionSize;
 
 		std::size_t foundCount = 0;
 
@@ -440,22 +440,10 @@ public:
 			if (!callback(foundCount, pIter)) // foundCount = the index of found pattern now.
 				break;
 
-			// Break the loop, stop this madness.
-			if (foundCount > 999)
-			{
-				std::fprintf(stderr, "%s%s:%d\n", 
-				                     ">> Detected an INFINITE LOOP!\n"
-				                     ">> Breaking from\n",
-				                     __FILE__, __LINE__);
-
-#ifdef __cpp_lib_debugging
-				std::breakpoint();
-#endif
-
-				break;
-			}
-
 			++foundCount;
+
+			// Prevent excessive iterations: ensure pattern is correct.
+			assert(1000 > foundCount);
 		}
 		while((pIter = sig.OffsetFromSelfAndFind(pIter, pSection)).IsValid());
 
