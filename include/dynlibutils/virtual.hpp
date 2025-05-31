@@ -47,22 +47,23 @@ constexpr std::ptrdiff_t GetVirtualIndex() noexcept
 		pAddr += 5 /*size of the instruction*/ + *(unsigned long*)(pAddr + 1);
 	}
 
+	//AMs note:
 	// Check whether it's a virtual function call
 	// They look like this:
-	// 004125A0 8B 01            mov         eax,dword ptr [ecx]
-	// 004125A2 FF 60 04         jmp         dword ptr [eax+4]
-	//		==OR==
-	// 00411B80 8B 01            mov         eax,dword ptr [ecx]
-	// 00411B82 FF A0 18 03 00 00 jmp         dword ptr [eax+318h]
+	// 004125A0 8B 01            mov        eax,dword ptr [ecx]
+	// 004125A2 FF 60 04         jmp        dword ptr [eax+4]
+	// 		==OR==
+	// 00411B80 8B 01            mov        eax,dword ptr [ecx]
+	// 00411B82 FF A0 18 03 00 00 jmp       dword ptr [eax+318h]
 
 	// However, for vararg functions, they look like this:
-	// 0048F0B0 8B 44 24 04      mov         eax,dword ptr [esp+4]
-	// 0048F0B4 8B 00            mov         eax,dword ptr [eax]
-	// 0048F0B6 FF 60 08         jmp         dword ptr [eax+8]
-	//		==OR==
-	// 0048F0B0 8B 44 24 04      mov         eax,dword ptr [esp+4]
-	// 0048F0B4 8B 00            mov         eax,dword ptr [eax]
-	// 00411B82 FF A0 18 03 00 00 jmp         dword ptr [eax+318h]
+	// 0048F0B0 8B 44 24 04      mov        eax,dword ptr [esp+4]
+	// 0048F0B4 8B 00            mov        eax,dword ptr [eax]
+	// 0048F0B6 FF 60 08         jmp        dword ptr [eax+8]
+	// 		==OR==
+	// 0048F0B0 8B 44 24 04      mov        eax,dword ptr [esp+4]
+	// 0048F0B4 8B 00            mov        eax,dword ptr [eax]
+	// 00411B82 FF A0 18 03 00 00 jmp       dword ptr [eax+318h]
 
 	// With varargs, the this pointer is passed as if it was the first argument
 
