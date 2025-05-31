@@ -427,7 +427,6 @@ public:
 			return 0;
 
 		const CMemory pBase = *pSection;
-		const std::size_t sectionSize = pSection->m_nSectionSize;
 
 		CMemory pIter = pStartAddress ? pStartAddress : pBase;
 
