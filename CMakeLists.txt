@@ -1,6 +1,6 @@
 # DynLibUtils
-# Copyright (C) 2023-2024 komashchenko & Wend4r
-# Licensed under the GPLv3 license. See LICENSE file in the project root for details.
+# Copyright (C) 2023-2024 Wend4r & komashchenko
+# Licensed under the MIT license. See LICENSE file in the project root for details.
 
 cmake_minimum_required(VERSION 3.14 FATAL_ERROR)
 
@@ -20,9 +20,9 @@ string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UPPER)
 
 set(PROJECT_OUTPUT_NAME "dynutils")
 
-set(PROJECT_AUTHOR "Wend4r")
-set(PROJECT_DESCRIPTION_FULL "Universal gamedata parser for Source 2 games")
-set(PROJECT_LICENSE "GPLv3")
+set(PROJECT_AUTHOR "Wend4r & komashchenko")
+set(PROJECT_DESCRIPTION_FULL "A library for interacting with dynamically loaded libraries (DLL, SO or DYLIB)")
+set(PROJECT_LICENSE "MIT")
 string(TIMESTAMP PROJECT_BUILD_DATE "%Y-%m-%d")
 string(TIMESTAMP PROJECT_BUILD_TIME "%H:%M:%S")
 

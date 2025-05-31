@@ -1,6 +1,6 @@
 # DynLibUtils
-# Copyright (C) 2023-2024 komashchenko & Wend4r
-# Licensed under the GPLv3 license. See LICENSE file in the project root for details.
+# Copyright (C) 2023-2024 Wend4r & komashchenko
+# Licensed under the MIT license. See LICENSE file in the project root for details.
 
 if(UNIX)
 	if(APPLE)

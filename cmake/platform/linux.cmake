@@ -1,24 +1,15 @@
 # DynLibUtils
-# Copyright (C) 2023-2024 komashchenko & Wend4r
-# Licensed under the GPLv3 license. See LICENSE file in the project root for details.
+# Copyright (C) 2023-2025 Wend4r & komashchenko
+# Licensed under the MIT license. See LICENSE file in the project root for details.
 
 set(PLATFORM_COMPILE_OPTIONS
 	${PLATFORM_COMPILE_OPTIONS}
 
 	-Wall
-	-Wno-array-bounds
-	-Wno-attributes -Wno-ignored-attributes
-	-Wno-conversion -Wno-overloaded-virtual
-	-Wno-delete-non-virtual-dtor -Wno-non-virtual-dtor
-	-Wno-invalid-offsetof -Wno-invalid-noreturn
-	-Wno-sign-compare
-	-Wno-unused -Wno-register
-	-Wno-narrowing
+	-Wno-attributes
 
 	-mtune=generic -mmmx -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2
 	-fvisibility=default -fPIC
-
-	-fno-strict-aliasing -fno-threadsafe-statics
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -28,13 +19,3 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 		-g3 -ggdb
 	)
 endif()
-
-set(PLATFORM_LINK_OPTIONS
-	${PLATFORM_LINK_OPTIONS}
-)
-
-set(PLATFORM_COMPILE_DEFINITIONS
-	${PLATFORM_COMPILE_DEFINITIONS}
-
-	_GLIBCXX_USE_CXX11_ABI=0
-)
