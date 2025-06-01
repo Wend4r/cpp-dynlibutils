@@ -463,7 +463,8 @@ public:
 	bool RemoveHook(CVirtualTable pVTable)
 	{
 		sm_vcallbacks(pVTable);
-		RemoveHook(pVTable);
+
+		return RemoveHook(pVTable) != 0;
 	}
 
 	void Clear()
