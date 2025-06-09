@@ -6,7 +6,7 @@ set(PLATFORM_COMPILE_OPTIONS
 	${PLATFORM_COMPILE_OPTIONS}
 
 	-Wall
-	-Wno-attributes
+	-Wno-array-bounds -Wno-attributes
 
 	-mtune=generic -mmmx -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2
 	-fvisibility=default -fPIC

@@ -6,7 +6,7 @@ set(PLATFORM_COMPILE_OPTIONS
 	${PLATFORM_COMPILE_OPTIONS}
 
 	-Wall
-	-Wno-attributes
+	-Wno-array-bounds -Wno-attributes
 
 	-fvisibility=default -fPIC
 )
