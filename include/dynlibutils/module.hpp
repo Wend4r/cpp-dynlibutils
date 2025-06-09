@@ -91,12 +91,20 @@ inline DYNLIB_COMPILE_TIME_EXPR void ProcessStringPattern(const char (&szInput)[
 
 	constexpr auto funcIsHexDigit = [](char c) -> bool
 	{
-		return ('0' <= c && c <= '9') || ('A' <= c && c <= 'F') || ('a' <= c && c <= 'f');
+		return ('0' <= c && c <= '9') || 
+		       ('A' <= c && c <= 'F') || 
+		       ('a' <= c && c <= 'f');
 	};
 
 	constexpr auto funcHexCharToByte = [](char c) -> std::uint8_t
 	{
-		return ('0' <= c && c <= '9') ? c - '0' : ('A' <= c && c <= 'F') ? c - 'A' + 10 : c - 'a' + 10;
+		if ('0' <= c && c <= '9')
+			return c - '0';
+
+		if ('A' <= c && c <= 'F')
+			return c - 'A' + 10;
+
+		return c - 'a' + 10;
 	};
 
 	constexpr std::size_t nLength = N - 1; // Exclude null-terminated character.
@@ -112,7 +120,7 @@ inline DYNLIB_COMPILE_TIME_EXPR void ProcessStringPattern(const char (&szInput)[
 		}
 		else if (c == '?')
 		{
-			aBytes[nIndex] = 0;
+			aBytes[nIndex] = 0x00;
 			aMask[nIndex] = '?';
 
 			n++;
@@ -127,9 +135,11 @@ inline DYNLIB_COMPILE_TIME_EXPR void ProcessStringPattern(const char (&szInput)[
 		{
 			if (n + 1 < nLength)
 			{
-				if (funcIsHexDigit(szInput[n + 1]))
+				const char c2 = szInput[n + 1];
+
+				if (funcIsHexDigit(c2))
 				{
-					aBytes[nIndex] = (funcHexCharToByte(c) << 4) | funcHexCharToByte(szInput[n + 1]);
+					aBytes[nIndex] = (funcHexCharToByte(c) << 4) | funcHexCharToByte(c2);
 					aMask[nIndex] = 'x';
 
 					n += 2;
@@ -138,17 +148,20 @@ inline DYNLIB_COMPILE_TIME_EXPR void ProcessStringPattern(const char (&szInput)[
 				}
 				else
 				{
-					static_assert(R"(Invalid character in pattern. Allowed: <space> or pair: "0-9", "a-f", "A-F" or "?")");
+					n++;
+					// Invalid character in pattern. Allowed pair: "0-9", "a-f", "A-F".
 				}
 			}
 			else
 			{
-				static_assert("Missing second hexadecimal digit in pattern");
+				n++;
+				// Missing second hexadecimal digit in pattern.
 			}
 		}
 		else
 		{
-			static_assert("Invalid character in pattern");
+			n++;
+			// Invalid character in pattern. Allowed <space> or pair: "0-9", "a-f", "A-F" or "?".
 		}
 	}
 }
