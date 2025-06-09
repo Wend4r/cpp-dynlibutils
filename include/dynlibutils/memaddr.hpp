@@ -173,7 +173,7 @@ public:
 	}
 
 	template<std::size_t BYTES_PER_LINE = 8, MemLineOutputFunc_t OUT_FUNC, MemByteToStringFunc_t TO_HEX_FUNC>
-	std::size_t Dump(std::size_t size, OUT_FUNC funcOutput, TO_HEX_FUNC funcToHex = GetDefaultMemToHexFunc<BYTES_PER_LINE>())
+	std::size_t Dump(std::size_t size, OUT_FUNC funcOutput, TO_HEX_FUNC funcToHex = GetDefaultMemToHexFunc<BYTES_PER_LINE>()) const
 	{
 		constexpr std::size_t kCharsPerLine = BYTES_PER_LINE * 2;
 
