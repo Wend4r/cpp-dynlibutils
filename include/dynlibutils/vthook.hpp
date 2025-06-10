@@ -143,7 +143,13 @@ class CVTHook : public CMemory
 public:
 	using Function_t = R (*)(Args...); // Is the pointer‐to‐function type matching the signature of the virtual method.
 
-	~CVTHook() { Unhook(); }
+	~CVTHook()
+	{
+		if (IsHooked())
+		{
+			UnhookImpl();
+		}
+	}
 
 	bool IsHooked() const noexcept { return IsValid(); } // Returns true if a hook is currently installed (i.e., we have a valid vtable slot pointer).
 	void Clear() noexcept { SetPtr(nullptr); m_pOriginalFn = nullptr; }
@@ -251,10 +257,13 @@ public:
 		CBase::Hook(pVTable, nIndex, +[](Args... args) -> R { return sm_callback(args...); });
 	}
 
-	void Unhook()
+	bool Unhook()
 	{
-		CBase::Unhook();
+		bool bResult = CBase::Unhook();
+
 		sm_callback = nullptr;
+
+		return bResult;
 	}
 
 protected:
