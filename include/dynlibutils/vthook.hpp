@@ -238,8 +238,7 @@ class CVTFHook : public CVTHook<R, Args...>
 {
 public:
 	using CBase = CVTHook<R, Args...>;
-	using Function_t = R (*)(Args...);
-	using Callback_t = std::function<R (Args...)>; // Allowing lambdas or other callable objects that match R(Args...) to be used as the hook target.
+	using Function_t = std::function<R (Args...)>; // Allowing lambdas or other callable objects that match R(Args...) to be used as the hook target.
 
 	void Clear() { CBase::Clear(); sm_callback = nullptr; }
 
@@ -247,9 +246,8 @@ public:
 	//   - pVTable:  CVirtualTable instance pointing to the target class’s vtable.
 	//   - nIndex (optional):  Zero‐based index into the vtable to replace.
 	//   - func:  Lambda callback to store and invoke when the hooked virtual function is called.
-	template<auto METHOD>
-	void Hook(CVirtualTable pVTable, Callback_t func) noexcept { Hook(pVTable, GetVirtualIndex<METHOD>(), func); }
-	void Hook(CVirtualTable pVTable, std::ptrdiff_t nIndex, Callback_t func) noexcept
+	template<auto METHOD> void Hook(CVirtualTable pVTable, Function_t &&func) noexcept { Hook(pVTable, GetVirtualIndex<METHOD>(), std::move(func)); }
+	void Hook(CVirtualTable pVTable, std::ptrdiff_t nIndex, Function_t &&func) noexcept
 	{
 		assert(!sm_callback);
 
@@ -267,7 +265,7 @@ public:
 	}
 
 protected:
-	inline static Callback_t sm_callback;
+	inline static Function_t sm_callback;
 }; // class CVTFHook<R, Args...>
 
 // A template class represents generic manager for multiple virtual‐table hooks of the same signature.
@@ -485,6 +483,48 @@ public:
 protected:
 	inline static std::map<CVirtualTable, std::vector<Function_t>> sm_vcallbacks;
 }; // class CVTFHookSet<R, T, Args...>
+
+// ========================================================================================
+// CVTHookAutoBase: Automatic wrapper for member function pointers
+// ========================================================================================
+//
+// This template uses partial specialization to inherit from a user-defined template T
+// instantiated with the signature of a given member function pointer. The T template must
+// accept the return type, a pointer to the class, and all method argument types.
+//
+// This pattern enables generic generation of function hooks or proxies with minimal
+// boilerplate: types are deduced from the function pointer automatically.
+//
+template<template<typename, typename...> class T, auto METHOD>
+class CVTHookAutoBase;
+
+// Partial specialization for member function pointers:
+// Inherits from T<R, C*, Args...> for the signature R (C::*)(Args...).
+template<template<typename, typename...> class T, typename R, typename C, typename ...Args, R (C::*METHOD)(Args...)>
+class CVTHookAutoBase<T, METHOD> : public T<R, C*, Args...>
+{
+public:
+	using CBase = T<R, C*, Args...>;
+	using CBase::CBase;
+
+	[[ always_inline ]] // Wend4r (Linux): don't allow typeinfo/rtti to be generated for templated C argument.
+	void Hook(CVirtualTable pVTable, CBase::Function_t &&func) noexcept
+	{
+		CBase::Hook(pVTable, GetVirtualIndex<METHOD>(), std::move(func));
+	}
+}; // CVTHookAutoBase<T, R, C, Args...>
+
+// ========================================================================================
+// Alias templates for concise hook type declarations
+// ========================================================================================
+//
+// These aliases allow you to declare an automatic hook/wrapper type for any member
+// function by simply specifying its pointer:
+//
+//   CVTHookAuto<&MyClass::SomeVirtualMethod> myHook;
+//
+template<auto METHOD> using CVTHookAuto = CVTHookAutoBase<CVTHook, METHOD>;
+template<auto METHOD> using CVTFHookAuto = CVTHookAutoBase<CVTFHook, METHOD>;
 
 // A final alias of CVTHook class.
 template<typename R, typename ...Args>
