@@ -282,7 +282,7 @@ class CVTMHookBase
 {
 public:
 	using Element_t = T;
-	using Function_t = Element_t::Function_t;
+	using Function_t = typename Element_t::Function_t;
 
 public:
 	bool IsEmpty() const noexcept { return m_storage.empty(); } // Returns true if no hooks are currently stored.
@@ -508,7 +508,7 @@ public:
 	using CBase::CBase;
 
 	[[ always_inline ]] // Wend4r (Linux): don't allow typeinfo/rtti to be generated for templated C argument.
-	void Hook(CVirtualTable pVTable, CBase::Function_t &&func) noexcept
+	void Hook(CVirtualTable pVTable, typename CBase::Function_t &&func) noexcept
 	{
 		CBase::Hook(pVTable, GetVirtualIndex<METHOD>(), std::move(func));
 	}
