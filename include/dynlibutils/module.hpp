@@ -293,7 +293,7 @@ public:
 
 	CModule(const CModule&) = delete;
 	CModule& operator=(const CModule&) = delete;
-	CModule(CModule&& other) noexcept = default;
+	CModule(CModule&& other) noexcept : CMemory(std::exchange(static_cast<CMemory &>(other), DYNLIB_INVALID_MEMORY)), m_sPath(std::move(other.m_sPath)), m_vecSections(std::move(other.m_vecSections)), m_pExecutableSection(std::move(other.m_pExecutableSection)) {}
 	CModule(const CMemory pModuleMemory);
 	explicit CModule(const std::string_view svModuleName);
 	explicit CModule(const char* pszModuleName) : CModule(std::string_view(pszModuleName)) {}
