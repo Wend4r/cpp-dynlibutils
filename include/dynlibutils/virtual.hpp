@@ -157,7 +157,7 @@ public: // Callers.
 	// R is the return type, Args... are the parameter types for the target function. 
 	// The function pointer is assumed to have the signature R (*)(void*, Args...), 
 	// where the first argument is the this-pointer.
-	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) { return GetMethod<R (*)(void *, Args...)>(nIndex)(this, args...); }
+	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) { return GetMethod<R (*)(Args...)>(nIndex)(args...); }
 	template<typename R, typename... Args> R CallMethod(std::ptrdiff_t nIndex, Args... args) const { return const_cast<CThis *>(this)->CallMethod(nIndex, args...); }
 
 	// Union to store either:
