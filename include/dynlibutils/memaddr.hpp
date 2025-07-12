@@ -68,9 +68,14 @@ inline std::string MemToHexString(T val)
 	return std::string(MemToHexString_unsafe<T, SIZE, CHARS>(sBuffer, val), CHARS); // Small-string optimization?
 }
 
+inline bool IsHumanChar(std::uint8_t byte)
+{
+	return ' ' <= byte && byte <= '~';
+}
+
 inline char MemToHumanChar(std::uint8_t byte)
 {
-	return (' ' <= byte && byte <= '~') ? static_cast<char>(byte) : '.';
+	return IsHumanChar(byte) ? static_cast<char>(byte) : '.';
 }
 
 template<std::size_t BYTES_PER_LINE>
