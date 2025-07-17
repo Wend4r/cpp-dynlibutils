@@ -132,7 +132,7 @@ public:
 	/// Access methods (setters).
 	constexpr void* SetPtr(void* pNew) noexcept { return m_ptr = pNew; }
 	constexpr std::ptrdiff_t SetAddr(std::ptrdiff_t nNew) noexcept { return m_addr = nNew; }
-	template<typename T> constexpr T &Set(const T &other) noexcept { return &GetRef<T>() = other; }
+	template<typename T> constexpr T &Set(const T &other) noexcept { return GetRef<T>() = other; }
 
 	// Checks methods.
 	bool IsValid() const noexcept { return GetPtr() != nullptr; }
