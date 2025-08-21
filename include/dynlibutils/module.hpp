@@ -305,7 +305,7 @@ public:
 	bool InitFromMemory(const CMemory pModuleMemory, bool bForce = true);
 
 	template<std::size_t N>
-	[[always_inline, nodiscard]]
+	[[nodiscard]]
 	inline auto CreateSignature(const Pattern_t<N> &copyFrom)
 	{
 		static_assert(N > 0, "Pattern size must be > 0");
@@ -314,7 +314,7 @@ public:
 	}
 
 	template<std::size_t N>
-	[[always_inline, nodiscard]]
+	[[nodiscard]]
 	inline auto CreateSignature(Pattern_t<N> &&moveFrom)
 	{
 		static_assert(N > 0, "Pattern size must be > 0");
@@ -331,7 +331,6 @@ public:
 	// Output : CMemory
 	//-----------------------------------------------------------------------------
 	template<std::size_t SIZE = (s_nDefaultPatternSize - 1) / 2>
-	[[always_inline, flatten, hot]]
 	inline CMemory FindPattern(const CMemoryView<std::uint8_t> pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
 	{
 		const auto* pPattern = pPatternMem.RCastView();
