@@ -83,9 +83,23 @@ concept PatternCallback_t = requires(T func, std::size_t index, CMemory match)
 #	define PatternCallback_t typename
 #endif
 
+#if defined(__clang__)
+#  define DYNLIB_FORCE_INLINE [[gnu::always_inline]] [[gnu::gnu_inline]] extern inline
+#  define DYNLIB_NOINLINE [[gnu::noinline]]
+#elif defined(__GNUC__)
+#  define DYNLIB_FORCE_INLINE [[gnu::always_inline]] inline
+#  define DYNLIB_NOINLINE [[gnu::noinline]]
+#elif defined(_MSC_VER)
+#  pragma warning(error: 4714)
+#  define DYNLIB_FORCE_INLINE [[msvc::forceinline]]
+#  define DYNLIB_NOINLINE __declspec(noinline)
+#else
+#  define DYNLIB_FORCE_INLINE inline
+#  define DYNLIB_NOINLINE
+#endif
+
 template<std::size_t INDEX = 0, std::size_t N, std::size_t SIZE = (N - 1) / 2>
-[[always_inline, nodiscard]]
-inline DYNLIB_COMPILE_TIME_EXPR void ProcessStringPattern(const char (&szInput)[N], std::size_t& n, std::size_t& nIndex, std::array<std::uint8_t, SIZE>& aBytes, std::array<char, SIZE>& aMask)
+DYNLIB_FORCE_INLINE DYNLIB_COMPILE_TIME_EXPR void ProcessStringPattern(const char (&szInput)[N], std::size_t& n, std::size_t& nIndex, std::array<std::uint8_t, SIZE>& aBytes, std::array<char, SIZE>& aMask)
 {
 	static_assert(SIZE > 0, "Process pattern cannot be empty");
 
@@ -172,8 +186,7 @@ inline DYNLIB_COMPILE_TIME_EXPR void ProcessStringPattern(const char (&szInput)[
 // Output : Pattern_t<SIZE> (fixed-size array by N cells with mask and used size)
 //----------------------------------------------------------------------------
 template<std::size_t N, std::size_t SIZE = (N - 1) / 2>
-[[always_inline, nodiscard]]
-inline DYNLIB_COMPILE_TIME_EXPR auto ParseStringPattern(const char (&szInput)[N])
+[[nodiscard]] DYNLIB_FORCE_INLINE DYNLIB_COMPILE_TIME_EXPR auto ParseStringPattern(const char (&szInput)[N])
 {
 	static_assert(SIZE > 0, "Pattern cannot be empty");
 

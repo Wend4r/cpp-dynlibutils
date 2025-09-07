@@ -81,7 +81,7 @@ public:
 		m_nLength = nLength;
 		m_pTarget = pTarget;
 
-		bool bIsUnprotected = VirtualProtect(pTarget, nLength, PAGE_EXECUTE_READWRITE, &m_nOldProtect);
+		[[maybe_unused]] bool bIsUnprotected = VirtualProtect(pTarget, nLength, PAGE_EXECUTE_READWRITE, &m_nOldProtect);
 #else
 		long pageSize = sysconf(_SC_PAGESIZE);
 
@@ -117,9 +117,9 @@ public:
 	{
 #if _WIN32
 		DWORD origProtect;
-		bool bIsUnprotected = VirtualProtect(m_pTarget, m_nLength, m_nOldProtect, &origProtect);
+		[[maybe_unused]] bool bIsUnprotected = VirtualProtect(m_pTarget, m_nLength, m_nOldProtect, &origProtect);
 #else
-		bool bIsUnprotected = !mprotect(m_pTarget, m_nLength, m_nOldProtect);
+		[[maybe_unused]] bool bIsUnprotected = !mprotect(m_pTarget, m_nLength, m_nOldProtect);
 #endif
 
 		assert(bIsUnprotected);
@@ -507,8 +507,8 @@ public:
 	using CBase = T<R, C*, Args...>;
 	using CBase::CBase;
 
-	[[ always_inline ]] // Wend4r (Linux): don't allow typeinfo/rtti to be generated for templated C argument.
-	void Hook(CVirtualTable pVTable, typename CBase::Function_t &&func) noexcept
+	// Wend4r (Linux): don't allow typeinfo/rtti to be generated for templated C argument.
+	DYNLIB_FORCE_INLINE void Hook(CVirtualTable pVTable, typename CBase::Function_t &&func) noexcept
 	{
 		CBase::Hook(pVTable, GetVirtualIndex<METHOD>(), std::move(func));
 	}

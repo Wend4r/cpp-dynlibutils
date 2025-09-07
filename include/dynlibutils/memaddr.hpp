@@ -112,7 +112,7 @@ public:
 
 	// Addition and subtraction operators.
 	CMemory operator+(const std::size_t right) const noexcept { return Offset(right); }
-	CMemory operator-(const std::size_t right) const noexcept { return Offset(-right); }
+	CMemory operator-(const std::size_t right) const noexcept { return Offset(-static_cast<std::ptrdiff_t>(right)); }
 	CMemory operator+(const std::ptrdiff_t right) const noexcept { return Offset(right); }
 	CMemory operator-(const std::ptrdiff_t right) const noexcept { return Offset(-right); }
 	CMemory operator+(const CMemory right) const noexcept { return Offset(static_cast<std::ptrdiff_t>(right.m_addr)); }
