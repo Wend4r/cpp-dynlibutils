@@ -26,6 +26,8 @@ set(PROJECT_LICENSE "MIT")
 string(TIMESTAMP PROJECT_BUILD_DATE "%Y-%m-%d")
 string(TIMESTAMP PROJECT_BUILD_TIME "%H:%M:%S")
 
+option(DYNLIBUTILS_USE_ABI0 "Enable use of the older C++ ABI, which was the default in GCC versions before GCC 5" ON)
+
 set(EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
 set(INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 set(SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
