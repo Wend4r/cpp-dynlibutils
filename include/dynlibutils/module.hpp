@@ -49,7 +49,7 @@ struct Section_t : public CMemory // Start address of the section.
 	std::string m_svSectionName;    // Name of the section.
 }; // struct Section_t
 
-static constexpr std::size_t s_nDefaultPatternSize = 128;
+static constexpr std::size_t s_nDefaultPatternSize = 256;
 static constexpr std::size_t s_nMaxSimdBlocks = 1 << 6; // 64 blocks = 1024 bytes per chunk.
 
 template<std::size_t SIZE = 0l>
