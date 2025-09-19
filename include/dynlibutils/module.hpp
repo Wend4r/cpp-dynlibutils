@@ -84,18 +84,18 @@ concept PatternCallback_t = requires(T func, std::size_t index, CMemory match)
 #endif
 
 #if defined(__clang__)
-#  define DYNLIB_FORCE_INLINE [[gnu::always_inline]] [[gnu::gnu_inline]] extern inline
-#  define DYNLIB_NOINLINE [[gnu::noinline]]
+#	define DYNLIB_FORCE_INLINE [[gnu::always_inline]] inline
+#	define DYNLIB_NOINLINE [[gnu::noinline]]
 #elif defined(__GNUC__)
-#  define DYNLIB_FORCE_INLINE [[gnu::always_inline]] inline
-#  define DYNLIB_NOINLINE [[gnu::noinline]]
+#	define DYNLIB_FORCE_INLINE [[gnu::always_inline]] inline
+#	define DYNLIB_NOINLINE [[gnu::noinline]]
 #elif defined(_MSC_VER)
-#  pragma warning(error: 4714)
-#  define DYNLIB_FORCE_INLINE [[msvc::forceinline]]
-#  define DYNLIB_NOINLINE __declspec(noinline)
+#	pragma warning(error: 4714)
+#	define DYNLIB_FORCE_INLINE [[msvc::forceinline]]
+#	define DYNLIB_NOINLINE __declspec(noinline)
 #else
-#  define DYNLIB_FORCE_INLINE inline
-#  define DYNLIB_NOINLINE
+#	define DYNLIB_FORCE_INLINE inline
+#	define DYNLIB_NOINLINE
 #endif
 
 template<std::size_t INDEX = 0, std::size_t N, std::size_t SIZE = (N - 1) / 2>
