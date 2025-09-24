@@ -432,8 +432,8 @@ class CVTFMHook : public CVTMHook<R, T, Args...>
 {
 public:
 	using Base_t = CVTMHook<R, T, Args...>;
-	using Function_t = R (*)(T, Args...);
-	using Callback_t = std::function<R (T, Args...)>;
+	using Function_t = std::function<R (T, Args...)>;
+	using Functions_t = std::vector<std::function<R (T, Args...)>>;
 
 	// AddHook (by index):
 	//   Installs or appends a callback for a given vtable index.
@@ -452,9 +452,20 @@ public:
 	//          b) Retrieves `callbacks`, which is a std::vector<Function_t> stored in sm_vcallbacks.
 	//          c) Iterates through each callback in the vector and invokes it with (pClass, args...).
 	template<auto METHOD>
-	void AddHook(CVirtualTable pVTable, Callback_t funcCallback) { return AddHook(pVTable, GetVirtualIndex<METHOD>(), funcCallback); }
-	void AddHook(CVirtualTable pVTable, std::ptrdiff_t nIndex, Callback_t funcCallback)
+	void AddHook(CVirtualTable pVTable, Function_t funcCallback) { return AddHook(pVTable, GetVirtualIndex<METHOD>(), funcCallback); }
+	void AddHook(CVirtualTable pVTable, std::ptrdiff_t nIndex, Function_t funcCallback)
 	{
+		auto found = sm_vcallbacks.find(pVTable);
+
+		if(found != sm_vcallbacks.cend())
+		{
+			found->second.push_back(std::move(funcCallback));
+		}
+		else
+		{
+			sm_vcallbacks.emplace(pVTable, Functions_t{std::move(funcCallback)});
+		}
+
 		Base_t::AddHook(pVTable, nIndex,
 			+[](T pClass, Args... args) -> R
 			{
@@ -490,7 +501,7 @@ public:
 	}
 
 protected:
-	inline static std::map<CVirtualTable, std::vector<Function_t>> sm_vcallbacks;
+	inline static std::map<CVirtualTable, Functions_t> sm_vcallbacks;
 }; // class CVTFHookSet<R, T, Args...>
 
 // ========================================================================================

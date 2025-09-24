@@ -136,6 +136,8 @@ public: // Types.
 
 public: // Constructors.
 	CVirtualTable() : m_pVTFs(nullptr) {}
+	CVirtualTable(const CVirtualTable &) = default;
+	CVirtualTable(CVirtualTable &&) = default;
 	CVirtualTable(void* pClass) : m_pVTFs(*reinterpret_cast<void***>(pClass)) {} // Interprets the object’s first memory slot as a pointer to its vtable.
 	CVirtualTable(CMemory pVTFs) : m_pVTFs(pVTFs.RCast<void**>()) {}
 
