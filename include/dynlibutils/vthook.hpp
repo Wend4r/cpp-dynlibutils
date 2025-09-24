@@ -318,18 +318,16 @@ public:
 
 		auto found = Find(CVirtualTable(pThis));
 
-		auto &vhooks = found.second;
-
-		if (vhooks == End())
+		if (found.first == found.second)
 		{
 			return results;
 		}
 
-		results.reserve(vhooks.size());
+		// results.reserve(vhooks.size());
 
-		for (auto it : vhooks)
+		for (auto it = found.first; it != found.second; it++)
 		{
-			results.push_back(it->Call(pThis, args...));
+			results.push_back(it->second.Call(pThis, args...));
 		}
 
 		return results;
@@ -341,16 +339,16 @@ public:
 	{
 		auto found = Find(CVirtualTable(pThis));
 
-		auto &vhooks = found.second;
-
-		if (vhooks == End())
+		if (found.first == found.second)
 		{
 			return false;
 		}
 
-		for (auto it : vhooks)
+		// results.reserve(vhooks.size());
+
+		for (auto it = found.first; it != found.second; it++)
 		{
-			it->Call(pThis, args...);
+			it->second.Call(pThis, args...);
 		}
 
 		return true;
@@ -422,9 +420,10 @@ using CVTMHook = CVTMHookBase<CVTHook<R, Args...>>;
 //
 //=============================================================================
 template<typename R, class T, typename ...Args>
-class CVTFMHook : public CVTMHook<R, Args...>
+class CVTFMHook : public CVTMHook<R, T, Args...>
 {
 public:
+	using Base_t = CVTMHook<R, T, Args...>;
 	using Function_t = R (*)(T, Args...);
 	using Callback_t = std::function<R (T, Args...)>;
 
@@ -448,36 +447,38 @@ public:
 	void AddHook(CVirtualTable pVTable, Callback_t funcCallback) { return AddHook(pVTable, GetVirtualIndex<METHOD>(), funcCallback); }
 	void AddHook(CVirtualTable pVTable, std::ptrdiff_t nIndex, Callback_t funcCallback)
 	{
-		AddHook(pVTable, nIndex,
-			+[](T pClass, Args... args)
+		Base_t::AddHook(pVTable, nIndex,
+			+[](T pClass, Args... args) -> R
 			{
 				auto found = sm_vcallbacks.find(CVirtualTable(pClass));
 
 				assert(found != sm_vcallbacks.cend());
 
-				auto &callbacks = found.second;
+				auto &callbacks = found->second;
 
-				const auto itEnd = callbacks.cend();
+				R result {};
 
 				for (auto it : callbacks)
 				{
-					it(pClass, args...);
+					result = it(pClass, args...);
 				}
+
+				return result;
 			}
 		);
 	}
 
 	bool RemoveHook(CVirtualTable pVTable)
 	{
-		sm_vcallbacks(pVTable);
+		sm_vcallbacks.erase(pVTable);
 
-		return RemoveHook(pVTable) != 0;
+		return Base_t::RemoveHook(pVTable) != 0;
 	}
 
 	void Clear()
 	{
 		sm_vcallbacks.clear();
-		Clear();
+		Base_t::Clear();
 	}
 
 protected:
