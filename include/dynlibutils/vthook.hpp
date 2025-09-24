@@ -143,6 +143,9 @@ class CVTHook : public CMemory
 public:
 	using Function_t = R (*)(Args...); // Is the pointer‐to‐function type matching the signature of the virtual method.
 
+	CVTHook() = default;
+	CVTHook(const CVTHook &other) = delete;
+	CVTHook(CVTHook &&other) : CMemory(std::exchange(static_cast<CMemory &>(other), DYNLIB_INVALID_MEMORY)), m_pOriginalFn(std::exchange(static_cast<CMemory &>(other.m_pOriginalFn), DYNLIB_INVALID_MEMORY)) {}
 	~CVTHook()
 	{
 		if (IsHooked())
@@ -238,6 +241,7 @@ class CVTFHook : public CVTHook<R, Args...>
 {
 public:
 	using CBase = CVTHook<R, Args...>;
+	using CBase::CBase;
 	using Function_t = std::function<R (Args...)>; // Allowing lambdas or other callable objects that match R(Args...) to be used as the hook target.
 
 	void Clear() { CBase::Clear(); sm_callback = nullptr; }
@@ -281,6 +285,10 @@ template<class T>
 class CVTMHookBase
 {
 public:
+	CVTMHookBase() = default;
+	CVTMHookBase(const CVTMHookBase &other) = delete;
+	CVTMHookBase(CVTMHookBase &&other) = default;
+
 	using Element_t = T;
 	using Function_t = typename Element_t::Function_t;
 
