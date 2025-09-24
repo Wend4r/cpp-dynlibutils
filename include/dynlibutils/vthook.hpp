@@ -317,10 +317,23 @@ public:
 		return m_storage.emplace(pVTable, std::move(vth));
 	}
 
+	template<typename R, typename C, typename ...Args>
+	R Call(C pThis, Args... args)
+	{
+		auto found = Find(CVirtualTable(pThis));
+
+		if (found.first == found.second)
+		{
+			return {};
+		}
+
+		return found.first->second.Call(pThis, args...);
+	}
+
 	// Returns a vector containing the return values from each hook’s Call() invocation, 
 	// in order of insertion. If no hooks were found for that vtable, returns an empty vector.
 	template<typename R, typename C, typename ...Args>
-	std::vector<R> Call(C pThis, Args... args)
+	std::vector<R> CallAll(C pThis, Args... args)
 	{
 		std::vector<R> results;
 
@@ -343,7 +356,7 @@ public:
 
 	// Returns true if at least one hook was executed; false if no hooks were found for that vtable.
 	template<typename C, typename ...Args>
-	bool CallNoReturn(C pThis, Args... args)
+	bool CallAllNoReturn(C pThis, Args... args)
 	{
 		auto found = Find(CVirtualTable(pThis));
 
