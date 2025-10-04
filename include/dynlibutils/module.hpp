@@ -35,7 +35,7 @@
 #	define DYNLIB_COMPILE_TIME_EXPR constexpr
 #endif
 
-#define INVALID_DYNLIB_BYTE (~0)
+constexpr uint8_t INVALID_DYNLIB_BYTE = 0xFFu;
 
 namespace DynLibUtils {
 
