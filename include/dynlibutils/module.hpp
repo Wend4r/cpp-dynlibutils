@@ -20,6 +20,11 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <variant>
+#include <span>
+#include <unordered_map>
+#include <mutex>
+#include <shared_mutex>
 
 #ifdef __cpp_concepts
 #	include <concepts>
@@ -92,10 +97,20 @@ concept PatternCallback_t = requires(T func, std::size_t index, CMemory match)
 #elif defined(_MSC_VER)
 #	pragma warning(error: 4714)
 #	define DYNLIB_FORCE_INLINE [[msvc::forceinline]]
-#	define DYNLIB_NOINLINE __declspec(noinline)
+#	define DYNLIB_NOINLINE [[msvc::noinline]]
 #else
 #	define DYNLIB_FORCE_INLINE inline
 #	define DYNLIB_NOINLINE
+#endif
+
+#if __has_cpp_attribute(no_unique_address)
+#if defined(_MSC_VER) && _MSC_VER >= 1929
+#	define DYNLIB_NUA [[msvc::no_unique_address]]
+#else
+#	define DYNLIB_NUA [[no_unique_address]]
+#endif
+#else
+#	define DYNLIB_NUA
 #endif
 
 template<std::size_t INDEX = 0, std::size_t N, std::size_t SIZE = (N - 1) / 2>
@@ -105,8 +120,8 @@ DYNLIB_FORCE_INLINE DYNLIB_COMPILE_TIME_EXPR void ProcessStringPattern(const cha
 
 	constexpr auto funcIsHexDigit = [](char c) -> bool
 	{
-		return ('0' <= c && c <= '9') || 
-		       ('A' <= c && c <= 'F') || 
+		return ('0' <= c && c <= '9') ||
+		       ('A' <= c && c <= 'F') ||
 		       ('a' <= c && c <= 'f');
 	};
 
@@ -127,7 +142,7 @@ DYNLIB_FORCE_INLINE DYNLIB_COMPILE_TIME_EXPR void ProcessStringPattern(const cha
 	{
 		const char c = szInput[n];
 
-		if (c == ' ') 
+		if (c == ' ')
 		{
 			n++;
 			ProcessStringPattern<INDEX + 1>(szInput, n, nIndex, aBytes, aMask);
@@ -259,8 +274,81 @@ inline auto ParsePattern(const std::string_view svInput)
 	return result;
 }
 
-class CModule : public CMemory
+struct CCache
 {
+	std::string m_svPattern;
+	uintptr_t m_nStart;
+	uintptr_t m_pSectionAddr;
+	size_t m_nSectionSize;
+
+	CCache(std::string_view svName, uintptr_t nMeta = 0)
+		: m_svPattern(svName)
+		, m_nStart(nMeta)
+		, m_pSectionAddr(0)
+		, m_nSectionSize(0) {
+	}
+
+	CCache(
+		const std::uint8_t* pPatternMem,
+		const size_t nSize,
+		const CMemory pStartAddress = nullptr,
+		const Section_t* pModuleSection = nullptr
+	)
+		: m_svPattern(pPatternMem, pPatternMem + nSize)
+		, m_nStart(pStartAddress.GetAddr())
+		, m_pSectionAddr(pModuleSection ? pModuleSection->GetAddr() : 0)
+		, m_nSectionSize(pModuleSection ? pModuleSection->m_nSectionSize : 0) {
+	}
+
+	bool operator==(const CCache& rhs) const noexcept
+	{
+		return m_svPattern == rhs.m_svPattern &&
+		       m_nStart == rhs.m_nStart &&
+		       m_pSectionAddr == rhs.m_pSectionAddr &&
+		       m_nSectionSize == rhs.m_nSectionSize;
+	}
+
+	bool operator<(const CCache& rhs) const noexcept
+	{
+		if (m_svPattern != rhs.m_svPattern)
+			return m_svPattern < rhs.m_svPattern;
+		if (m_nStart != rhs.m_nStart)
+			return m_nStart < rhs.m_nStart;
+		if (m_pSectionAddr != rhs.m_pSectionAddr)
+			return m_pSectionAddr < rhs.m_pSectionAddr;
+		return m_nSectionSize < rhs.m_nSectionSize;
+	}
+};
+
+struct CHash
+{
+	std::size_t operator()(const CCache& k) const noexcept
+	{
+		static constexpr std::size_t golden_ratio = 0x9e3779b9u;
+		std::size_t h = std::hash<std::string>()(k.m_svPattern);
+		h ^= std::hash<uintptr_t>()(k.m_nStart) + golden_ratio + (h << 6) + (h >> 2);
+		h ^= std::hash<uintptr_t>()(k.m_pSectionAddr) + golden_ratio + (h << 6) + (h >> 2);
+		h ^= std::hash<size_t>()(k.m_nSectionSize) + golden_ratio + (h << 6) + (h >> 2);
+		return h;
+	}
+};
+
+struct CNullMutex
+{
+	void lock() const {}
+	void unlock() const {}
+	bool try_lock() const { return true; }
+
+	void lock_shared() const noexcept {}
+	void unlock_shared() const noexcept {}
+	bool try_lock_shared() const noexcept { return true; }
+};
+
+template<typename Mutex = CNullMutex>
+class CAssemblyModule : public CMemory
+{
+	using UniqueLock_t = std::unique_lock<Mutex>;
+	using SharedLock_t = std::shared_lock<Mutex>;
 public:
 	template<std::size_t SIZE>
 	class CSignatureView : public Pattern_t<SIZE>
@@ -268,13 +356,13 @@ public:
 		using Base_t = Pattern_t<SIZE>;
 
 	private:
-		CModule* m_pModule;
+		CAssemblyModule* m_pModule;
 
 	public:
 		constexpr CSignatureView() : m_pModule(nullptr) {}
 		constexpr CSignatureView(CSignatureView&& moveFrom) : Base_t(std::move(moveFrom)), m_pModule(std::move(moveFrom.m_pModule)) {}
-		constexpr CSignatureView(const Base_t& pattern, CModule* module) : Base_t(pattern), m_pModule(module) {}
-		constexpr CSignatureView(Base_t&& pattern, CModule* module) : Base_t(std::move(pattern)), m_pModule(module) {}
+		constexpr CSignatureView(const Base_t& pattern, CAssemblyModule* module) : Base_t(pattern), m_pModule(module) {}
+		constexpr CSignatureView(Base_t&& pattern, CAssemblyModule* module) : Base_t(std::move(pattern)), m_pModule(module) {}
 
 		bool IsValid() const { return m_pModule && m_pModule->IsValid(); }
 
@@ -294,23 +382,30 @@ public:
 	}; // class CSignatureView<SIZE>
 
 private:
+	[[nodiscard]] CMemory GetVirtualTable(const std::string_view svTableName, bool bDecorated = false) const;
+	[[nodiscard]] CMemory GetFunction(const std::string_view svFunctionName) const noexcept;
+	CMemory GetAddress(const CCache& hKey) const noexcept;
+
 	std::string m_sPath;
 	std::string m_sLastError;
 	std::vector<Section_t> m_vecSections;
 
 	const Section_t *m_pExecutableSection;
 
-public:
-	CModule() : m_pExecutableSection(nullptr) {}
-	~CModule();
+	alignas(std::hardware_constructive_interference_size) mutable std::unordered_map<CCache, CMemory, CHash> m_mapCached;
+	DYNLIB_NUA mutable Mutex m_mutex;
 
-	CModule(const CModule&) = delete;
-	CModule& operator=(const CModule&) = delete;
-	CModule(CModule&& other) noexcept : CMemory(std::exchange(static_cast<CMemory &>(other), DYNLIB_INVALID_MEMORY)), m_sPath(std::move(other.m_sPath)), m_vecSections(std::move(other.m_vecSections)), m_pExecutableSection(std::move(other.m_pExecutableSection)) {}
-	CModule(const CMemory pModuleMemory);
-	explicit CModule(const std::string_view svModuleName);
-	explicit CModule(const char* pszModuleName) : CModule(std::string_view(pszModuleName)) {}
-	explicit CModule(const std::string& sModuleName) : CModule(std::string_view(sModuleName)) {}
+public:
+	CAssemblyModule() : m_pExecutableSection(nullptr) {}
+	~CAssemblyModule();
+
+	CAssemblyModule(const CAssemblyModule&) = delete;
+	CAssemblyModule& operator=(const CAssemblyModule&) = delete;
+	CAssemblyModule(CAssemblyModule&& other) noexcept : CMemory(std::exchange(static_cast<CMemory &>(other), DYNLIB_INVALID_MEMORY)), m_sPath(std::move(other.m_sPath)), m_vecSections(std::move(other.m_vecSections)), m_pExecutableSection(std::move(other.m_pExecutableSection)) {}
+	CAssemblyModule(const CMemory pModuleMemory);
+	explicit CAssemblyModule(const std::string_view svModuleName);
+	explicit CAssemblyModule(const char* pszModuleName) : CAssemblyModule(std::string_view(pszModuleName)) {}
+	explicit CAssemblyModule(const std::string& sModuleName) : CAssemblyModule(std::string_view(sModuleName)) {}
 
 	bool LoadFromPath(const std::string_view svModelePath, int flags);
 
@@ -347,6 +442,12 @@ public:
 	inline CMemory FindPattern(const CMemoryView<std::uint8_t> pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
 	{
 		const auto* pPattern = pPatternMem.RCastView();
+
+		CCache sKey(pPattern, svMask.size(), pStartAddress, pModuleSection);
+		if (auto pAddr = GetAddress(sKey))
+		{
+			return pAddr;
+		}
 
 		const Section_t* pSection = pModuleSection ? pModuleSection : m_pExecutableSection;
 
@@ -394,10 +495,10 @@ public:
 		}
 
 		// How far ahead (in bytes) to prefetch during scanning.
-		// This is calculated based on how many SIMD blocks (16 bytes each) will be read 
+		// This is calculated based on how many SIMD blocks (16 bytes each) will be read
 		// in the current pattern match attempt.
 		//
-		// Helps reduce cache misses during large linear memory scans by hinting the CPU 
+		// Helps reduce cache misses during large linear memory scans by hinting the CPU
 		// to load the next block of memory before it is needed.
 		const std::size_t lookAhead = numBlocks * kSimdBytes;
 
@@ -422,7 +523,11 @@ public:
 			}
 
 			if (bFound)
+			{
+				UniqueLock_t lock(m_mutex);
+				m_mapCached[std::move(sKey)] = pData;
 				return pData;
+			}
 		}
 
 		return DYNLIB_INVALID_MEMORY;
@@ -493,14 +598,19 @@ public:
 
 protected:
 	void SaveLastError();
-}; // class CModule
+}; // class CAssemblyModule
 
-class Module final : CModule
+using CModule = CAssemblyModule<CNullMutex>;
+
+class Module final : public CModule
 {
 public:
 	using CBase = CModule;
 	using CBase::CBase;
 };
+
+extern template class CAssemblyModule<CNullMutex>;
+extern template class CAssemblyModule<std::shared_mutex>;
 
 } // namespace DynLibUtils
 

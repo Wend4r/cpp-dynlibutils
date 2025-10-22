@@ -38,7 +38,8 @@ struct dlopen_handle {
 
 using namespace DynLibUtils;
 
-CModule::~CModule()
+template<typename Mutex>
+CAssemblyModule<Mutex>::~CAssemblyModule()
 {
 	if (IsValid())
 		dlclose(GetPtr());
@@ -50,7 +51,8 @@ CModule::~CModule()
 //          bExtension
 // Output : bool
 //-----------------------------------------------------------------------------
-bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
+template<typename Mutex>
+bool CAssemblyModule<Mutex>::InitFromName(const std::string_view svModuleName, bool bExtension)
 {
 	if (IsValid())
 		return false;
@@ -73,7 +75,8 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 // Input  : pModuleMemory
 // Output : bool
 //-----------------------------------------------------------------------------
-bool CModule::InitFromMemory(const CMemory pModuleMemory, bool bForce)
+template<typename Mutex>
+bool CAssemblyModule<Mutex>::InitFromMemory(const CMemory pModuleMemory, bool bForce)
 {
 	if (IsValid() && !bForce)
 		return false;
@@ -94,7 +97,8 @@ bool CModule::InitFromMemory(const CMemory pModuleMemory, bool bForce)
 //-----------------------------------------------------------------------------
 // Purpose: Initializes a module descriptors
 //-----------------------------------------------------------------------------
-bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
+template<typename Mutex>
+bool CAssemblyModule<Mutex>::LoadFromPath(const std::string_view svModelePath, int flags)
 {
 	void* handle = dlopen(svModelePath.data(), flags);
 	if (!handle) {
@@ -157,7 +161,8 @@ bool CModule::LoadFromPath(const std::string_view svModelePath, int flags)
 //          bDecorated
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool bDecorated) const
+template<typename Mutex>
+CMemory CAssemblyModule<Mutex>::GetVirtualTable(const std::string_view svTableName, bool bDecorated) const
 {
 	if (svTableName.empty())
 		return DYNLIB_INVALID_MEMORY;
@@ -172,7 +177,8 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 // Input  : svFunctionName
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const noexcept
+template<typename Mutex>
+CMemory CAssemblyModule<Mutex>::GetFunction(const std::string_view svFunctionName) const noexcept
 {
 	return CMemory((IsValid() && !svFunctionName.empty()) ? dlsym(GetPtr(), svFunctionName.data()) : nullptr);
 }
@@ -180,12 +186,14 @@ CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const 
 //-----------------------------------------------------------------------------
 // Purpose: Returns the module base
 //-----------------------------------------------------------------------------
-CMemory CModule::GetBase() const noexcept
+template<typename Mutex>
+CMemory CAssemblyModule<Mutex>::GetBase() const noexcept
 {
 	return CMemory(RCast<dlopen_handle*>()->module);
 }
 
-void CModule::SaveLastError()
+template<typename Mutex>
+void CAssemblyModule<Mutex>::SaveLastError()
 {
 	m_sLastError = dlerror();
 }

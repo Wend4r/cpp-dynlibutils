@@ -46,29 +46,29 @@ set(COMPILE_DEFINITIONS
 	-DDYNLIBUTILS_SEPARATE_SOURCE_FILES
 )
 
-set(SOURCE_FILES
-	${SOURCE_DIR}/module.cpp
-)
-
 set(INCLUDE_DIRS
 	${INCLUDE_DIR}
 )
 
 if(WINDOWS)
-	list(APPEND SOURCE_FILES
-		${SOURCE_DIR}/windows/module.cpp
+	set(SOURCE_FILES
+			${SOURCE_DIR}/windows/module.cpp
 	)
 elseif(LINUX)
-	list(APPEND SOURCE_FILES
-		${SOURCE_DIR}/linux/module.cpp
+	set(SOURCE_FILES
+			${SOURCE_DIR}/linux/module.cpp
 	)
 elseif(MACOS)
-	list(APPEND SOURCE_FILES
-		${SOURCE_DIR}/apple/module.cpp
+	set(SOURCE_FILES
+			${SOURCE_DIR}/apple/module.cpp
 	)
 else()
 	message(FATAL_ERROR "Unsupported platform")
 endif()
+
+list(APPEND SOURCE_FILES
+		${SOURCE_DIR}/module.cpp # always include last
+)
 
 add_library(${PROJECT_NAME} STATIC ${SOURCE_FILES})
 
