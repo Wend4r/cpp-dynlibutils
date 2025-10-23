@@ -206,7 +206,7 @@ CMemory CAssemblyModule<Mutex>::GetBase() const noexcept
 }
 
 template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::SaveLastError()
+void CAssemblyModule<Mutex>::SaveLastError()
 {
 	auto errorCode = ::GetLastError();
 	if (errorCode == 0) {

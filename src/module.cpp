@@ -77,7 +77,7 @@ CMemory CAssemblyModule<Mutex>::GetAddress(const CCache& hKey) const noexcept
 
 #ifdef DYNLIBUTILS_SEPARATE_SOURCE_FILES
 	#if defined _WIN32 && _M_X64
-		#include "linux/windows.cpp"
+		#include "windows/module.cpp"
 	#elif defined __linux__ && __x86_64__
 		#include "linux/module.cpp"
 	#elif defined __APPLE__ && __x86_64__
@@ -87,5 +87,5 @@ CMemory CAssemblyModule<Mutex>::GetAddress(const CCache& hKey) const noexcept
 	#endif
 #endif
 
-template class CAssemblyModule<CNullMutex>;
-template class CAssemblyModule<std::shared_mutex>;
+template class DynLibUtils::CAssemblyModule<DynLibUtils::CNullMutex>;
+template class DynLibUtils::CAssemblyModule<std::shared_mutex>;

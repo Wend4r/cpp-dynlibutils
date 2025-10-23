@@ -20,7 +20,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <span>
+#include <new>
 #include <unordered_map>
 #include <mutex>
 #include <shared_mutex>
