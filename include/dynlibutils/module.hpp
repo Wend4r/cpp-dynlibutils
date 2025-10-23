@@ -20,7 +20,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <new>
 #include <unordered_map>
 #include <mutex>
 #include <shared_mutex>
@@ -391,7 +390,7 @@ private:
 
 	const Section_t *m_pExecutableSection;
 
-	alignas(std::hardware_constructive_interference_size) mutable std::unordered_map<CCache, CMemory, CHash> m_mapCached;
+	alignas(64) mutable std::unordered_map<CCache, CMemory, CHash> m_mapCached;
 	DYNLIB_NUA mutable Mutex m_mutex;
 
 public:
