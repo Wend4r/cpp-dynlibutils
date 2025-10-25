@@ -541,7 +541,7 @@ public:
 	using CBase::CBase;
 
 	// Wend4r (Linux): don't allow typeinfo/rtti to be generated for templated C argument.
-	DYNLIB_FORCE_INLINE void Hook(CVirtualTable pVTable, typename CBase::Function_t &&func) noexcept
+	void Hook(CVirtualTable pVTable, typename CBase::Function_t &&func) noexcept
 	{
 		CBase::Hook(pVTable, GetVirtualIndex<METHOD>(), std::move(func));
 	}
