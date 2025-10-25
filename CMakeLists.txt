@@ -20,7 +20,7 @@ string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UPPER)
 
 set(PROJECT_OUTPUT_NAME "dynutils")
 
-set(PROJECT_AUTHOR "Wend4r & komashchenko")
+set(PROJECT_AUTHOR "Wend4r & komashchenko & qubka")
 set(PROJECT_DESCRIPTION_FULL "A library for interacting with dynamically loaded libraries (DLL, SO or DYLIB)")
 set(PROJECT_LICENSE "MIT")
 string(TIMESTAMP PROJECT_BUILD_DATE "%Y-%m-%d")
