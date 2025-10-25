@@ -1,16 +1,15 @@
+//
 // DynLibUtils
-// Copyright (C) 2023 komashchenko (Phoenix)
+// Copyright (C) 2023-2025 Vladimir Ezhikov (Wend4r), Borys Komashchenko (Phoenix), Nikita Ushakov (qubka)
 // Licensed under the MIT license. See LICENSE file in the project root for details.
+//
+
+#include "os.h"
 
 #include <dynlibutils/module.hpp>
 #include <dynlibutils/memaddr.hpp>
 
 #include <cstring>
-#include <link.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
 
 using namespace DynLibUtils;
 

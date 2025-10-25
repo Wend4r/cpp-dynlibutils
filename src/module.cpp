@@ -1,13 +1,11 @@
+//
 // DynLibUtils
-// Copyright (C) 2023 komashchenko (Phoenix)
+// Copyright (C) 2023-2025 Vladimir Ezhikov (Wend4r), Borys Komashchenko (Phoenix), Nikita Ushakov (qubka)
 // Licensed under the MIT license. See LICENSE file in the project root for details.
+//
 
 #include <dynlibutils/module.hpp>
 #include <dynlibutils/memaddr.hpp>
-
-#include <cstring>
-#include <cmath>
-#include <emmintrin.h>
 
 using namespace DynLibUtils;
 
@@ -76,11 +74,11 @@ CMemory CAssemblyModule<Mutex>::GetAddress(const CCache& hKey) const noexcept
 }
 
 #ifdef DYNLIBUTILS_SEPARATE_SOURCE_FILES
-	#if defined _WIN32 && _M_X64
+	#if DYNLIBUTILS_PLATFORM_WINDOWS
 		#include "windows/module.cpp"
-	#elif defined __linux__ && __x86_64__
+	#elif DYNLIBUTILS_PLATFORM_LINUX
 		#include "linux/module.cpp"
-	#elif defined __APPLE__ && __x86_64__
+	#elif DYNLIBUTILS_PLATFORM_APPLE
 		#include "apple/module.cpp"
 	#else
 		#error "Unsupported platform"

@@ -1,6 +1,6 @@
 //
 // DynLibUtils
-// Copyright (C) 2023-2025 Vladimir Ezhikov (Wend4r) & Borys Komashchenko (Phoenix)
+// Copyright (C) 2023-2025 Vladimir Ezhikov (Wend4r), Borys Komashchenko (Phoenix), Nikita Ushakov (qubka)
 // Licensed under the MIT license. See LICENSE file in the project root for details.
 //
 
@@ -10,6 +10,7 @@
 
 #include "memaddr.hpp"
 #include "virtual.hpp"
+#include "memprotector.hpp"
 
 #if _WIN32
 #	define WIN32_LEAN_AND_MEAN
@@ -30,106 +31,6 @@
 namespace DynLibUtils {
 
 using ProtectFlags_t = unsigned long;
-
-//=============================================================================
-// VirtualUnprotector
-//
-// A RAII helper that temporarily changes the protection of a memory region 
-// so that it becomes writable (and executable, if required). Upon destruction, 
-// it restores the original protection flags.
-//=============================================================================
-class VirtualUnprotector final
-{
-public:
-	//--------------------------------------------------------------------------
-	// Constructor: Temporarily changes memory protection on [pTarget, pTarget+nLength)
-	//
-	// Parameters:
-	//   - pTarget:  Starting address of the region to unprotect. This typically 
-	//               points to code or data that needs to be overwritten at runtime. 
-	//   - nLength:  Number of bytes to change. Default is sizeof(void*), which 
-	//               is often enough to patch a single function pointer or small 
-	//               instruction sequence.
-	//
-	// Behavior:
-	//   - On Windows: 
-	//       * Saves pTarget to m_pTarget and nLength to m_nLength. 
-	//       * Calls VirtualProtect(pTarget, nLength, PAGE_EXECUTE_READWRITE, &m_nOldProtect) 
-	//         to mark that region as Read/Write/Execute. 
-	//       * m_nOldProtect receives the previous page protection flags. 
-	//       * Asserts that VirtualProtect returned success (bIsUnprotected != 0).
-	//
-	//   - On POSIX (Linux/macOS): 
-	//       * Queries page size via sysconf(_SC_PAGESIZE). 
-	//       * Rounds pTarget down to the nearest page boundary (pPageStart). 
-	//       * Rounds (pTarget + nLength) up to the next page boundary (pPageEnd). 
-	//       * Computes nAligned = pPageEnd - pPageStart so that the entire range 
-	//         of pages touched by the original region is included. 
-	//       * Stores m_pTarget = pPageStart and m_nLength = nAligned. 
-	//       * Sets m_nOldProtect = PROT_READ (assumes original region was at least readable). 
-	//       * Calls mprotect(pPageStart, nAligned, PROT_READ | PROT_WRITE) to grant 
-	//         write permission (while keeping read). 
-	//       * Asserts that mprotect returned 0 (success).
-	//
-	// The constructor is noexcept: it does not throw exceptions. Failures to change 
-	// page protection are caught by assert() in debug builds; in release builds, they 
-	// proceed silently, which may mean writing to protected memory will fail.
-	//--------------------------------------------------------------------------
-	explicit VirtualUnprotector(void *pTarget, std::size_t nLength = sizeof(void*)) noexcept
-	{
-#if _WIN32
-		m_nLength = nLength;
-		m_pTarget = pTarget;
-
-		[[maybe_unused]] bool bIsUnprotected = VirtualProtect(pTarget, nLength, PAGE_EXECUTE_READWRITE, &m_nOldProtect);
-#else
-		long pageSize = sysconf(_SC_PAGESIZE);
-
-		assert(pageSize >= 0);
-
-		auto nPageSize = static_cast<std::uintptr_t>(pageSize);
-
-		// Compute page-aligned start address.
-		auto pAddress = reinterpret_cast<std::uintptr_t>(pTarget);
-		CMemory        pPageStart = pAddress & ~(nPageSize - 1l);
-		std::uintptr_t pPageEnd = (pAddress + nLength + nPageSize - 1l) & ~(nPageSize - 1l); // Compute page-aligned end address (round up).
-		auto nAligned = static_cast<std::size_t>(pPageEnd - pPageStart);
-
-		// Assume the original protection was at least PROT_READ.
-		m_nOldProtect = PROT_READ;
-		m_nLength = nAligned;
-		m_pTarget = pPageStart;
-
-		bool bIsUnprotected = !mprotect(pPageStart, nAligned, PROT_READ | PROT_WRITE); // Grant write permission while keeping read permission.
-#endif
-
-		assert(bIsUnprotected);
-	}
-
-	//--------------------------------------------------------------------------
-	// Destructor: Restores the original protection flags on the affected pages.
-	//
-	// Asserts that the restoration succeeds. If it fails in a debug build, the program 
-	// will abort; in a release build, failure is silent (which may lead to incorrect 
-	// memory protections afterward).
-	//--------------------------------------------------------------------------
-	~VirtualUnprotector()
-	{
-#if _WIN32
-		DWORD origProtect;
-		[[maybe_unused]] bool bIsUnprotected = VirtualProtect(m_pTarget, m_nLength, m_nOldProtect, &origProtect);
-#else
-		[[maybe_unused]] bool bIsUnprotected = !mprotect(m_pTarget, m_nLength, m_nOldProtect);
-#endif
-
-		assert(bIsUnprotected);
-	}
-
-private:
-	ProtectFlags_t m_nOldProtect;
-	std::size_t m_nLength;
-	CMemory m_pTarget;
-}; // class VirtualUnprotector
 
 // A template class that allows hooking (i.e., replacing) a single virtual method 
 // in a class’s vtable. It derives from CMemory to leverage memory‐reading/writing utilities.
@@ -214,14 +115,14 @@ public:
 protected: // Implementation methods.
 	void HookImpl(Function_t pfnTarget) noexcept
 	{
-		VirtualUnprotector unprotect(GetPtr());
+		CMemProtector unprotect(GetPtr(), sizeof(void*), ProtFlag::RWX);
 
 		*GetTargetPtr() = pfnTarget;
 	}
 
 	void UnhookImpl() noexcept
 	{
-		VirtualUnprotector unprotect(GetPtr());
+		CMemProtector unprotect(GetPtr(), sizeof(void*), ProtFlag::RWX);
 
 		*GetTargetPtr<void **>() = m_pOriginalFn.GetPtr();
 	}

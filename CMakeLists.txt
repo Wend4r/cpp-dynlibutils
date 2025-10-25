@@ -43,7 +43,10 @@ elseif(MACOS)
 endif()
 
 set(COMPILE_DEFINITIONS
-	-DDYNLIBUTILS_SEPARATE_SOURCE_FILES
+	#DYNLIBUTILS_SEPARATE_SOURCE_FILES
+	DYNLIBUTILS_PLATFORM_LINUX=${LINUX}
+	DYNLIBUTILS_PLATFORM_WINDOWS=${WIN32}
+	DYNLIBUTILS_PLATFORM_APPLE=${APPLE}
 )
 
 set(INCLUDE_DIRS
@@ -52,14 +55,20 @@ set(INCLUDE_DIRS
 
 if(WINDOWS)
 	set(SOURCE_FILES
+			${SOURCE_DIR}/windows/memaccessor.cpp
+			${SOURCE_DIR}/windows/memprotector.cpp
 			${SOURCE_DIR}/windows/module.cpp
 	)
 elseif(LINUX)
 	set(SOURCE_FILES
+			${SOURCE_DIR}/linux/memaccessor.cpp
+			${SOURCE_DIR}/linux/memprotector.cpp
 			${SOURCE_DIR}/linux/module.cpp
 	)
 elseif(MACOS)
 	set(SOURCE_FILES
+			${SOURCE_DIR}/apple/memaccessor.cpp
+			${SOURCE_DIR}/apple/memprotector.cpp
 			${SOURCE_DIR}/apple/module.cpp
 	)
 else()
@@ -67,6 +76,8 @@ else()
 endif()
 
 list(APPEND SOURCE_FILES
+		${SOURCE_DIR}/memaccessor.cpp
+		${SOURCE_DIR}/memprotector.cpp
 		${SOURCE_DIR}/module.cpp # always include last
 )
 

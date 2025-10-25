@@ -1,20 +1,13 @@
+//
 // DynLibUtils
-// Copyright (C) 2023-2024 komashchenko (Phoenix) & Vladimir Ezhikov (Wend4r)
+// Copyright (C) 2023-2025 Vladimir Ezhikov (Wend4r), Borys Komashchenko (Phoenix), Nikita Ushakov (qubka)
 // Licensed under the MIT license. See LICENSE file in the project root for details.
+//
+
+#include "os.h"
 
 #include <dynlibutils/module.hpp>
 #include <dynlibutils/memaddr.hpp>
-
-#include <dlfcn.h>
-#include <mach/mach.h>
-#include <mach/mach_vm.h>
-#include <mach-o/loader.h>
-#include <mach-o/fat.h>
-#include <mach-o/nlist.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
 
 typedef struct mach_header_64 MachHeader;
 typedef struct segment_command_64 MachSegment;

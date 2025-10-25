@@ -1,6 +1,6 @@
 //
 // DynLibUtils
-// Copyright (C) 2023-2025 Vladimir Ezhikov (Wend4r) & Borys Komashchenko (Phoenix)
+// Copyright (C) 2023-2025 Vladimir Ezhikov (Wend4r), Borys Komashchenko (Phoenix), Nikita Ushakov (qubka)
 // Licensed under the MIT license. See LICENSE file in the project root for details.
 //
 
@@ -333,9 +333,9 @@ struct CHash
 
 struct CNullMutex
 {
-	void lock() const {}
-	void unlock() const {}
-	bool try_lock() const { return true; }
+	void lock() const noexcept {}
+	void unlock() const noexcept {}
+	bool try_lock() const noexcept { return true; }
 
 	void lock_shared() const noexcept {}
 	void unlock_shared() const noexcept {}
@@ -390,7 +390,7 @@ private:
 
 	const Section_t *m_pExecutableSection;
 
-	alignas(64) mutable std::unordered_map<CCache, CMemory, CHash> m_mapCached;
+	mutable std::unordered_map<CCache, CMemory, CHash> m_mapCached;
 	DYNLIB_NUA mutable Mutex m_mutex;
 
 public:
