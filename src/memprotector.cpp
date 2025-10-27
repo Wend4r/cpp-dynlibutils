@@ -23,15 +23,3 @@ CMemProtector::~CMemProtector() {
 
 	CMemAccessor::MemProtect(m_address, m_length, m_origProtection, m_status);
 }
-
-#ifdef DYNLIBUTILS_SEPARATE_SOURCE_FILES
-	#if DYNLIBUTILS_PLATFORM_WINDOWS
-		#include "windows/memprotector.cpp"
-	#elif DYNLIBUTILS_PLATFORM_LINUX
-		#include "linux/memprotector.cpp"
-	#elif DYNLIBUTILS_PLATFORM_APPLE
-		#include "apple/memprotector.cpp"
-	#else
-		#error "Unsupported platform"
-	#endif
-#endif
