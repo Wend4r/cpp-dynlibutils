@@ -245,8 +245,9 @@ class CMemoryView : public CMemory
 public:
 	using CBase = CMemory;
 	using CBase::CBase;
+	using CBase::m_addr;
 
-	constexpr CMemoryView& operator=(const CMemory& copyFrom) noexcept { static_cast<CBase>(*this) = copyFrom; };
+	constexpr CMemoryView& operator=(const CMemory& copyFrom) noexcept { static_cast<CBase>(*this) = copyFrom; return *this; };
 
 	using Element_t = T;
 	using CThis = CMemoryView<T>;
@@ -271,8 +272,8 @@ public:
 	constexpr T Get() const { return GetRef(); }
 
 	/// Offset methods (view ones; operators are used).
-	CThis Offset(std::ptrdiff_t offset) const noexcept { return CThis(reinterpret_cast<T *>(CBase::m_addr) + offset); }
-	CThis& OffsetSelf(std::ptrdiff_t offset) noexcept { reinterpret_cast<T *>(CBase::m_addr) += offset; return *this; }
+	CThis Offset(std::ptrdiff_t offset) const noexcept { return CThis(reinterpret_cast<T *>(m_addr) + offset); }
+	CThis& OffsetSelf(std::ptrdiff_t offset) noexcept { reinterpret_cast<T *>(m_addr) += offset; return *this; }
 }; // class CMemoryView
 
 } // namespace DynLibUtils
