@@ -210,7 +210,7 @@ CMemory CModule::GetVirtualTableByName(std::string_view tableName, bool decorate
 	if (tableName.empty())
 		return nullptr;
 
-	CModule::Section readOnlyData = GetSectionByName(".rodata"), readOnlyRelocations = GetSectionByName(".data.rel.ro");
+	Section readOnlyData = GetSectionByName(".rodata"), readOnlyRelocations = GetSectionByName(".data.rel.ro");
 	if (!readOnlyData || !readOnlyRelocations)
 		return nullptr;
 
@@ -229,7 +229,7 @@ CMemory CModule::GetVirtualTableByName(std::string_view tableName, bool decorate
 
 	for (const auto& sectionName : {std::string_view(".data.rel.ro"), std::string_view(".data.rel.ro.local")})
 	{
-		CModule::Section section = GetSectionByName(sectionName);
+		Section section = GetSectionByName(sectionName);
 		if (!section)
 			continue;
 

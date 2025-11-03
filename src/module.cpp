@@ -13,7 +13,10 @@
 #include <algorithm>
 
 #if !DYNLIBUTILS_ARCH_ARM
-#include <immintrin.h>
+#if DYNLIBUTILS_COMPILER_GCC && !DYNLIBUTILS_COMPILER_CLANG && !defined(NDEBUG)
+#undef __OPTIMIZE__
+#endif // !defined(NDEBUG)
+#include <emmintrin.h>
 #endif // !DYNLIBUTILS_ARCH_ARM
 
 using namespace DynLibUtils;
@@ -96,96 +99,6 @@ std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(std::
 	return ret;
 }
 
-namespace {
-#ifdef __SSE2__
-CMemory FindPatternSSE2(uint8_t* pData, const uint8_t* pEnd, const uint8_t* pattern, const uint8_t* mask, size_t maskLen)
-{
-    __m128i patternVec = _mm_setzero_si128();
-    __m128i maskVec = _mm_setzero_si128();
-
-    std::memcpy(&patternVec, pattern, maskLen);
-    std::memcpy(&maskVec, mask, maskLen);
-
-    const uint8_t* simdEnd = pEnd - 16 + maskLen;
-
-	unsigned int expectedMask;
-	if (maskLen >= 16) {
-		expectedMask = 0xFFFF;
-	} else {
-		expectedMask = (1U << maskLen) - 1;
-	}
-
-    for (; pData <= simdEnd; ++pData) {
-        __m128i dataVec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData));
-        __m128i maskedData = _mm_and_si128(dataVec, maskVec);
-        __m128i maskedPattern = _mm_and_si128(patternVec, maskVec);
-        __m128i cmp = _mm_cmpeq_epi8(maskedData, maskedPattern);
-
-        unsigned int matchMask = _mm_movemask_epi8(cmp);
-
-        if ((matchMask & expectedMask) == expectedMask) {
-            return pData;
-        }
-    }
-
-    return nullptr;
-}
-#endif
-
-#ifdef __AVX2__
-CMemory FindPatternAVX2(uint8_t* pData, const uint8_t* pEnd, const uint8_t* pattern, const uint8_t* mask, size_t maskLen)
-{
-    __m256i patternVec = _mm256_setzero_si256();
-    __m256i maskVec = _mm256_setzero_si256();
-
-    std::memcpy(&patternVec, pattern, maskLen);
-    std::memcpy(&maskVec, mask, maskLen);
-
-    const uint8_t* simdEnd = pEnd - 32 + maskLen;
-
-	unsigned int expectedMask;
-	if (maskLen >= 32) {
-		expectedMask = 0xFFFFFFFF;
-	} else {
-		expectedMask = (1U << maskLen) - 1;
-	}
-
-    for (; pData <= simdEnd; ++pData) {
-        __m256i dataVec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(pData));
-        __m256i maskedData = _mm256_and_si256(dataVec, maskVec);
-        __m256i maskedPattern = _mm256_and_si256(patternVec, maskVec);
-        __m256i cmp = _mm256_cmpeq_epi8(maskedData, maskedPattern);
-
-        unsigned int matchMask = _mm256_movemask_epi8(cmp);
-
-        if ((matchMask & expectedMask) == expectedMask) {
-            return pData;
-        }
-    }
-
-    return nullptr;
-}
-#endif
-
-CMemory FindPatternScalar(uint8_t* pData, const uint8_t* pEnd, const uint8_t* pattern, const char* mask, size_t maskLen)
-{
-    for (; pData <= pEnd; ++pData)
-    {
-        bool found = true;
-        for (size_t i = 0; i < maskLen; ++i)
-        {
-            if (mask[i] == 'x' && pattern[i] != pData[i]) {
-                found = false;
-                break;
-            }
-        }
-        if (found)
-            return pData;
-    }
-    return nullptr;
-}
-}
-
 CMemory CModule::FindPattern(CMemory pattern, std::string_view mask, CMemory startAddress, const Section* moduleSection) const
 {
 	const uint8_t* pPattern = pattern.RCast<const uint8_t*>();
@@ -195,66 +108,76 @@ CMemory CModule::FindPattern(CMemory pattern, std::string_view mask, CMemory sta
 
 	const uintptr_t base = section.base;
 	const size_t size = section.size;
+
 	const size_t maskLen = mask.length();
+	const uint8_t* pData = reinterpret_cast<uint8_t*>(base);
+	const uint8_t* pEnd = pData + size - maskLen;
 
-	if (maskLen == 0 || size < maskLen)
-		return nullptr;
-
-	uint8_t* pData = reinterpret_cast<uint8_t*>(base);
-	uint8_t* pEnd = pData + size - maskLen;
-
-	if (startAddress)
-	{
-		uint8_t* pStartAddress = startAddress.RCast<uint8_t*>();
+	if (startAddress) {
+		const uint8_t* pStartAddress = startAddress.RCast<uint8_t*>();
 		if (pData > pStartAddress || pStartAddress > pEnd)
 			return nullptr;
+
 		pData = pStartAddress;
 	}
 
-#if defined(__AVX2__) || defined(__SSE2__)
-	// Preprocess: create filtered pattern (replace wildcards with 0) and mask
-	std::vector<uint8_t> filteredPattern(maskLen);
-	std::vector<uint8_t> binaryMask(maskLen);
+#if !DYNLIBUTILS_ARCH_ARM
+	std::array<int, 64> masks = {};// 64*16 = enough masks for 1024 bytes.
+	const uint8_t numMasks = static_cast<uint8_t>(std::ceil(static_cast<float>(maskLen) / 16.f));
 
-	for (size_t i = 0; i < maskLen; ++i)
-	{
-		if (mask[i] == 'x')
-		{
-			filteredPattern[i] = pPattern[i];
-			binaryMask[i] = 0xFF;
-		}
-		else
-		{
-			filteredPattern[i] = 0;
-			binaryMask[i] = 0;
+	for (uint8_t i = 0; i < numMasks; ++i) {
+		for (int8_t j = static_cast<int8_t>(std::min<size_t>(maskLen - i * 16, 16)) - 1; j >= 0; --j) {
+			if (mask[static_cast<size_t>(i * 16 + j)] == 'x') {
+				masks[i] |= 1 << j;
+			}
 		}
 	}
-#endif
 
-#if defined(__AVX2__)
-	// AVX2 version (32 bytes at a time)
-	if (maskLen <= 32)
-	{
-		return FindPatternAVX2(pData, pEnd, filteredPattern.data(), binaryMask.data(), maskLen);
+	const __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pPattern));
+	__m128i xmm2, xmm3, msks;
+	for (; pData != pEnd; _mm_prefetch(reinterpret_cast<const char*>(++pData + 64), _MM_HINT_NTA)) {
+		xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData));
+		msks = _mm_cmpeq_epi8(xmm1, xmm2);
+		if ((_mm_movemask_epi8(msks) & masks[0]) == masks[0]) {
+			bool found = true;
+			for (uint8_t i = 1; i < numMasks; ++i) {
+				xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pData + i * 16)));
+				xmm3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pPattern + i * 16)));
+				msks = _mm_cmpeq_epi8(xmm2, xmm3);
+				if ((_mm_movemask_epi8(msks) & masks[i]) != masks[i]) {
+					found = false;
+					break;
+				}
+			}
+
+			if (found)
+				return pData;
+		}
 	}
-#endif
+#else
+	for (; pData != pEnd; ++pData) {
+		bool found = false;
 
-#if defined(__SSE2__)
-	// SSE2 version (16 bytes at a time)
-	if (maskLen <= 16)
-	{
-		return FindPatternSSE2(pData, pEnd, filteredPattern.data(), binaryMask.data(), maskLen);
+		for (size_t i = 0; i < maskLen; ++i) {
+			if (mask[i] == 'x' || pPattern[i] == *(pData + i)) {
+				found = true;
+			} else {
+				found = false;
+				break;
+			}
+		}
+
+		if (found)
+			return pData;
 	}
-#endif
-
-	// Fallback for long patterns or no SIMD support
-	return FindPatternScalar(pData, pEnd, pPattern, mask.data(), maskLen);
+#endif // !DYNLIBUTILS_ARCH_ARM
+	return nullptr;
 }
 
 CMemory CModule::FindPattern(std::string_view pattern, CMemory startAddress, Section* moduleSection) const
 {
 	const std::pair patternInfo = PatternToMaskedBytes(pattern);
-	return FindPattern(CMemory(patternInfo.first.data()), patternInfo.second, startAddress, moduleSection);
+	return FindPattern(patternInfo.first.data(), patternInfo.second, startAddress, moduleSection);
 }
 
 CModule::Section CModule::GetSectionByName(std::string_view sectionName) const noexcept
