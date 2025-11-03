@@ -13,8 +13,10 @@
 
 #include <emmintrin.h>
 
+#include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstring>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -429,7 +431,7 @@ public:
 	}
 
 	//-----------------------------------------------------------------------------
-	// Purpose: Finds an array of bytes in process memory using SIMD instructions
+	// Purpose: Finds an array of bytes in process memory
 	// Input  : *pPattern
 	//          svMask
 	//          pStartAddress
@@ -443,12 +445,9 @@ public:
 
 		CCache sKey(pPattern, svMask.size(), pStartAddress, pModuleSection);
 		if (auto pAddr = GetAddress(sKey))
-		{
 			return pAddr;
-		}
 
 		const Section_t* pSection = pModuleSection ? pModuleSection : m_pExecutableSection;
-
 		if (!pSection || !pSection->IsValid())
 			return DYNLIB_INVALID_MEMORY;
 
@@ -464,59 +463,87 @@ public:
 			auto* start = pStartAddress.RCast<std::uint8_t*>();
 			if (start < pData || start > pEnd)
 				return DYNLIB_INVALID_MEMORY;
-
 			pData = start;
 		}
 
-		constexpr auto kSimdBytes = sizeof(__m128i); // 128 bits = 16 bytes.
-		constexpr auto kMaxSimdBlocks = std::max<std::size_t>(1u, std::min<std::size_t>(SIZE, s_nMaxSimdBlocks));
-
-		const std::size_t numBlocks = (patternSize + (kSimdBytes - 1)) / kSimdBytes;
-
-		std::uint16_t bitMasks[kMaxSimdBlocks] = {};
-		__m128i patternChunks[kMaxSimdBlocks];
-
-		for (std::size_t n = 0; n < numBlocks; ++n)
+		// Precompute contiguous 'x' runs for memcmp.
+		struct SignatureMask_t
 		{
-			const std::size_t offset = n * kSimdBytes;
-			patternChunks[n] = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pPattern + offset));
+			std::size_t offset;
+			std::size_t length;
+		};
 
-			for (std::size_t j = 0; j < kSimdBytes; ++j)
+		SignatureMask_t iters[SIZE > 0 ? SIZE : 1]; // upper bound is fine; SIZE is already capped upstream
+		std::size_t runCount = 0;
+
+		{
+			std::size_t i = 0;
+			while (i < patternSize)
 			{
-				const std::size_t idx = offset + j;
-				if (idx >= patternSize)
+				// Skip wildcards
+				while (i < patternSize && svMask[i] != 'x')
+					++i;
+
+				if (i >= patternSize)
 					break;
 
-				if (svMask[idx] == 'x')
-					bitMasks[n] |= (1u << j);
+				const std::size_t start = i;
+				while (i < patternSize && svMask[i] == 'x')
+					++i;
+
+				const std::size_t len = i - start;
+				if (len)
+				{
+					if (runCount < std::size(iters))
+					{
+						iters[runCount++] = SignatureMask_t{ start, len };
+					}
+					else
+					{
+						// Fallback: if too many runs for the static buffer, do a simple byte-wise path later.
+						runCount = 0;
+						break;
+					}
+				}
 			}
 		}
 
-		// How far ahead (in bytes) to prefetch during scanning.
-		// This is calculated based on how many SIMD blocks (16 bytes each) will be read
-		// in the current pattern match attempt.
-		//
-		// Helps reduce cache misses during large linear memory scans by hinting the CPU
-		// to load the next block of memory before it is needed.
-		const std::size_t lookAhead = numBlocks * kSimdBytes;
+		// If mask has no 'x', first position matches trivially.
+		if (runCount == 0 && std::find(svMask.begin(), svMask.end(), 'x') == svMask.end())
+		{
+			UniqueLock_t lock(m_mutex);
+			m_mapCached[std::move(sKey)] = pData;
+			return pData;
+		}
 
+		// Main scan.
 		for (; pData <= pEnd; ++pData)
 		{
-			if (static_cast<std::size_t>(pEnd - pData) > lookAhead)
-				_mm_prefetch(reinterpret_cast<const char*>(pData + lookAhead), _MM_HINT_NTA);
-
 			bool bFound = true;
 
-			for (std::size_t n = 0; n < numBlocks; ++n)
+			if (runCount)
 			{
-				const __m128i dataChunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData + n * kSimdBytes));
-				const __m128i cmp = _mm_cmpeq_epi8(dataChunk, patternChunks[n]);
-				const int mask = _mm_movemask_epi8(cmp);
-
-				if ((mask & bitMasks[n]) != bitMasks[n])
+				// memcmp only over the strict segments
+				for (std::size_t r = 0; r < runCount; ++r)
 				{
-					bFound = false;
-					break;
+					const SignatureMask_t& run = iters[r];
+					if (std::memcmp(pData + run.offset, pPattern + run.offset, run.length) != 0)
+					{
+						bFound = false;
+						break;
+					}
+				}
+			}
+			else
+			{
+				// Degenerate path if run buffer overflowed: byte-wise check honoring mask.
+				for (std::size_t j = 0; j < patternSize; ++j)
+				{
+					if (svMask[j] == 'x' && pData[j] != pPattern[j])
+					{
+						bFound = false;
+						break;
+					}
 				}
 			}
 
