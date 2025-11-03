@@ -287,7 +287,7 @@ struct CCache
 	}
 
 	CCache(
-		const std::uint8_t* pPatternMem,
+		const volatile std::uint8_t* pPatternMem,
 		const size_t nSize,
 		const CMemory pStartAddress = nullptr,
 		const Section_t* pModuleSection = nullptr
@@ -439,7 +439,7 @@ public:
 	template<std::size_t SIZE = (s_nDefaultPatternSize - 1) / 2>
 	inline CMemory FindPattern(const CMemoryView<std::uint8_t> pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
 	{
-		const auto* pPattern = pPatternMem.RCastView();
+		volatile const auto* pPattern = pPatternMem.RCastView();
 
 		CCache sKey(pPattern, svMask.size(), pStartAddress, pModuleSection);
 		if (auto pAddr = GetAddress(sKey))
@@ -479,7 +479,7 @@ public:
 		for (std::size_t n = 0; n < numBlocks; ++n)
 		{
 			const std::size_t offset = n * kSimdBytes;
-			patternChunks[n] = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pPattern + offset));
+			patternChunks[n] = _mm_loadu_si128(reinterpret_cast<const __m128i*>(const_cast<std::uint8_t*>(pPattern) + offset));
 
 			for (std::size_t j = 0; j < kSimdBytes; ++j)
 			{
