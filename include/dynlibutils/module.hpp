@@ -473,8 +473,8 @@ public:
 			std::size_t length;
 		};
 
-		SignatureMask_t iters[SIZE > 0 ? SIZE : 1]; // upper bound is fine; SIZE is already capped upstream
-		std::size_t runCount = 0;
+		SignatureMask_t sigs[SIZE > 0 ? SIZE : 1]; // upper bound is fine; SIZE is already capped upstream
+		std::size_t numSigs = 0;
 
 		{
 			std::size_t i = 0;
@@ -494,14 +494,14 @@ public:
 				const std::size_t len = i - start;
 				if (len)
 				{
-					if (runCount < std::size(iters))
+					if (numSigs < std::size(sigs))
 					{
-						iters[runCount++] = SignatureMask_t{ start, len };
+						sigs[numSigs++] = SignatureMask_t{ start, len };
 					}
 					else
 					{
 						// Fallback: if too many runs for the static buffer, do a simple byte-wise path later.
-						runCount = 0;
+						numSigs = 0;
 						break;
 					}
 				}
@@ -509,7 +509,7 @@ public:
 		}
 
 		// If mask has no 'x', first position matches trivially.
-		if (runCount == 0 && std::find(svMask.begin(), svMask.end(), 'x') == svMask.end())
+		if (numSigs == 0 && std::find(svMask.begin(), svMask.end(), 'x') == svMask.end())
 		{
 			UniqueLock_t lock(m_mutex);
 			m_mapCached[std::move(sKey)] = pData;
@@ -521,12 +521,12 @@ public:
 		{
 			bool bFound = true;
 
-			if (runCount)
+			if (numSigs)
 			{
 				// memcmp only over the strict segments
-				for (std::size_t r = 0; r < runCount; ++r)
+				for (std::size_t r = 0; r < numSigs; ++r)
 				{
-					const SignatureMask_t& run = iters[r];
+					const SignatureMask_t& run = sigs[r];
 					if (std::memcmp(pData + run.offset, pPattern + run.offset, run.length) != 0)
 					{
 						bFound = false;
