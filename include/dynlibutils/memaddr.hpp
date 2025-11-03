@@ -96,12 +96,15 @@ class CMemory
 {
 public:
 	// Constructor ones.
+	constexpr CMemory() noexcept : m_ptr{nullptr} {}
 	constexpr CMemory(const CMemory&) noexcept = default;
 	constexpr CMemory(CMemory&&) noexcept = default;
 	constexpr CMemory& operator=(const CMemory&) noexcept = default;
 	constexpr CMemory& operator=(CMemory&& other) noexcept = default;
 	constexpr CMemory(const std::uintptr_t addr) : m_addr(addr) {}
-	constexpr CMemory(void* ptr = nullptr) : m_ptr(ptr) {}
+	template<typename T,typename = std::enable_if_t<std::is_pointer_v<T> || std::is_null_pointer_v<T>>>
+	constexpr CMemory(T ptr) noexcept
+		: m_addr{reinterpret_cast<uintptr_t>(ptr)} {}
 
 	/// Conversion operators.
 	constexpr operator void*() const noexcept { return GetPtr(); }

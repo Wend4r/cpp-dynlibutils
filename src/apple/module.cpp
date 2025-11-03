@@ -9,6 +9,7 @@
 #include <dynlibutils/module.hpp>
 #include <dynlibutils/memaddr.hpp>
 
+#if DYNLIBUTILS_ARCH_BITS == 64
 typedef struct mach_header_64 MachHeader;
 typedef struct segment_command_64 MachSegment;
 typedef struct section_64 MachSection;
@@ -16,10 +17,20 @@ const uint32_t MACH_MAGIC = MH_MAGIC_64;
 const uint32_t MACH_LOADCMD_SEGMENT = LC_SEGMENT_64;
 const cpu_type_t MACH_CPU_TYPE = CPU_TYPE_X86_64;
 const cpu_subtype_t MACH_CPU_SUBTYPE = CPU_SUBTYPE_X86_64_ALL;
+#else
+typedef struct mach_header MachHeader;
+typedef struct segment_command MachSegment;
+typedef struct section MachSection;
+const uint32_t MACH_MAGIC = MH_MAGIC;
+const uint32_t MACH_LOADCMD_SEGMENT = LC_SEGMENT;
+const cpu_type_t MACH_CPU_TYPE = CPU_TYPE_I386;
+const cpu_subtype_t MACH_CPU_SUBTYPE = CPU_SUBTYPE_I386_ALL;
+#endif // DYNLIBUTILS_ARCH_BITS
 
-typedef void * NSModule;
+typedef void* NSModule;
 
-struct dlopen_handle {
+struct dlopen_handle
+{
 	dev_t dev;		/* the path's device and inode number from stat(2) */
 	ino_t ino;
 	int dlopen_mode;	/* current dlopen mode for this handle */
@@ -31,162 +42,169 @@ struct dlopen_handle {
 
 using namespace DynLibUtils;
 
-template<typename Mutex>
-CAssemblyModule<Mutex>::~CAssemblyModule()
+CModule::~CModule()
 {
-	if (IsValid())
-		dlclose(GetPtr());
+	if (m_handle)
+	{
+		dlclose(m_handle);
+		m_handle = nullptr;
+	}
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Initializes the module from module name
-// Input  : svModuleName
-//          bExtension
-// Output : bool
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-bool CAssemblyModule<Mutex>::InitFromName(const std::string_view svModuleName, bool bExtension)
+bool CModule::InitFromName(std::string_view /*moduleName*/, LoadFlag /*flags*/, const SearchDirs& /*additionalSearchDirectories*/, bool /*extension*/, bool /*sections*/)
 {
-	if (IsValid())
-		return false;
-
-	if (svModuleName.empty())
-		return false;
-
-	std::string sModuleName(svModuleName);
-
-	if (!bExtension)
-		sModuleName.append(".dylib");
-
-	SetPtr(dlopen(sModuleName.c_str(), RTLD_LAZY));
-
-	return IsValid();
+	// TODO: Implement
+	return false;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Initializes the module from module memory
-// Input  : pModuleMemory
-// Output : bool
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-bool CAssemblyModule<Mutex>::InitFromMemory(const CMemory pModuleMemory, bool bForce)
+bool CModule::InitFromMemory(CMemory moduleMemory, LoadFlag flags, const SearchDirs& additionalSearchDirectories, bool sections)
 {
-	if (IsValid() && !bForce)
+	if (m_handle)
 		return false;
 
-	if (!pModuleMemory.IsValid())
+	if (!moduleMemory)
 		return false;
 
 	Dl_info info;
-	if (!dladdr(pModuleMemory, &info) || !info.dli_fbase || !info.dli_fname)
+	if (!dladdr(moduleMemory, &info) || !info.dli_fbase || !info.dli_fname)
 		return false;
 
-	if (!LoadFromPath(info.dli_fname, RTLD_LAZY))
+	if (!Init(info.dli_fname, flags, additionalSearchDirectories, sections))
 		return false;
 
 	return true;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Initializes a module descriptors
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-bool CAssemblyModule<Mutex>::LoadFromPath(const std::string_view svModelePath, int flags)
+bool CModule::InitFromHandle(Handle /*moduleHandle*/, LoadFlag /*flags*/, const SearchDirs& /*additionalSearchDirectories*/, bool /*sections*/)
 {
-	void* handle = dlopen(svModelePath.data(), flags);
-	if (!handle) {
-		SaveLastError();
+	// TODO: Implement
+	return false;
+}
+
+bool CModule::Init(std::filesystem::path modulePath, LoadFlag flags, const SearchDirs& /*additionalSearchDirectories*/, bool sections)
+{
+	// Cannot set LYLD_LIBRARY_PATH at runtime, so use rpath flag
+
+	void* handle = dlopen(modulePath.c_str(), TranslateLoading(flags));
+	if (!handle)
+	{
+		m_error = dlerror();
 		return false;
 	}
 
-	SetPtr(handle);
-	m_sPath = std::move(svModelePath);
+	m_handle = handle;
+	m_path = std::move(modulePath);
 
-	if (m_vecSections.size())
-		return true;
+	if (sections)
+	{
+		return LoadSections();
+	}
 
-	const auto* header = RCast<const MachHeader*>();
+	return true;
+}
 
-/*
-	if (header->magic != MACH_MAGIC) {
-		_error = "Not a valid Mach-O file.";
+bool CModule::LoadSections()
+{
+	const MachHeader* header = reinterpret_cast<const MachHeader*>(m_handle);
+	/*
+	if (header->magic != MACH_MAGIC)
+	{
+		m_error = "Not a valid Mach-O file.";
 		return false;
 	}
 
-	if (header->cputype != MACH_CPU_TYPE || header->cpusubtype != MACH_CPU_SUBTYPE) {
-		_error = "Not a valid Mach-O file architecture.";
+	if (header->cputype != MACH_CPU_TYPE || header->cpusubtype != MACH_CPU_SUBTYPE)
+	{
+		m_error = "Not a valid Mach-O file architecture.";
 		return false;
 	}
 
-	if (header->filetype != MH_DYLIB) {
-		_error = "Mach-O file must be a dynamic library.";
+	if (header->filetype != MH_DYLIB)
+	{
+		m_error = "Mach-O file must be a dynamic library.";
 		return false;
 	}
-*/
-
+	*/
 	const load_command* cmd = reinterpret_cast<const load_command*>(reinterpret_cast<uintptr_t>(header) + sizeof(MachHeader));
-	for (uint32_t i = 0; i < header->ncmds; ++i) {
-		if (cmd->cmd == MACH_LOADCMD_SEGMENT) {
+	for (uint32_t i = 0; i < header->ncmds; ++i)
+	{
+		if (cmd->cmd == MACH_LOADCMD_SEGMENT)
+		{
 			const MachSegment* seg = reinterpret_cast<const MachSegment*>(cmd);
 			const MachSection* sec = reinterpret_cast<const MachSection*>(reinterpret_cast<uintptr_t>(seg) + sizeof(MachSegment));
 
-			for (uint32_t j = 0; j < seg->nsects; ++j) {
+			for (uint32_t j = 0; j < seg->nsects; ++j)
+			{
 				const MachSection& section = sec[j];
-				m_vecSections.emplace_back(
-					GetAddr() + section.addr,
-					section.size,
-					section.sectname
+				m_sections.emplace_back(
+					section.sectname,
+					reinterpret_cast<uintptr_t>(m_handle) + section.addr,
+					section.size
 				);
 			}
 		}
 		cmd = reinterpret_cast<const load_command*>(reinterpret_cast<uintptr_t>(cmd) + cmd->cmdsize);
 	}
 
-	m_pExecutableSection = GetSectionByName("__TEXT");
-	assert(m_pExecutableSection != nullptr);
-
+	m_executableCode = GetSectionByName("__TEXT");
 	return true;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Gets an address of a virtual method table by rtti type descriptor name
-// Input  : svTableName
-//          bDecorated
-// Output : CMemory
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::GetVirtualTable(const std::string_view svTableName, bool bDecorated) const
+CMemory CModule::GetVirtualTableByName(std::string_view tableName, bool /*decorated*/) const
 {
-	if (svTableName.empty())
-		return DYNLIB_INVALID_MEMORY;
+	if (tableName.empty())
+		return nullptr;
 
 	// TODO: Implement
 
-	return DYNLIB_INVALID_MEMORY;
+	return nullptr;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Gets an address of a virtual method table by rtti type descriptor name
-// Input  : svFunctionName
-// Output : CMemory
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::GetFunction(const std::string_view svFunctionName) const noexcept
+CMemory CModule::GetFunctionByName(std::string_view functionName) const noexcept
 {
-	return CMemory((IsValid() && !svFunctionName.empty()) ? dlsym(GetPtr(), svFunctionName.data()) : nullptr);
+	if (!m_handle)
+		return nullptr;
+
+	if (functionName.empty())
+		return nullptr;
+
+	return dlsym(m_handle, functionName.data());
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Returns the module base
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::GetBase() const noexcept
+CMemory CModule::GetBase() const noexcept
 {
-	return CMemory(RCast<dlopen_handle*>()->module);
+	return reinterpret_cast<dlopen_handle*>(m_handle)->module;
 }
 
-template<typename Mutex>
-void CAssemblyModule<Mutex>::SaveLastError()
+namespace DynLibUtils
 {
-	m_sLastError = dlerror();
+	int TranslateLoading(LoadFlag flags) noexcept
+	{
+		int unixFlags = 0;
+		if (flags & LoadFlag::Lazy) unixFlags |= RTLD_LAZY;
+		if (flags & LoadFlag::Now) unixFlags |= RTLD_NOW;
+		if (flags & LoadFlag::Global) unixFlags |= RTLD_GLOBAL;
+		if (flags & LoadFlag::Local) unixFlags |= RTLD_LOCAL;
+		if (flags & LoadFlag::Nodelete) unixFlags |= RTLD_NODELETE;
+		if (flags & LoadFlag::Noload) unixFlags |= RTLD_NOLOAD;
+	#ifdef RTLD_DEEPBIND
+		if (flags & LoadFlag::Deepbind) unixFlags |= RTLD_DEEPBIND;
+	#endif // RTLD_DEEPBIND
+		return unixFlags;
+	}
+
+	LoadFlag TranslateLoading(int flags) noexcept
+	{
+		LoadFlag loadFlags = LoadFlag::Default;
+		if (flags & RTLD_LAZY) loadFlags = loadFlags | LoadFlag::Lazy;
+		if (flags & RTLD_NOW) loadFlags = loadFlags | LoadFlag::Now;
+		if (flags & RTLD_GLOBAL) loadFlags = loadFlags | LoadFlag::Global;
+		if (flags & RTLD_LOCAL) loadFlags = loadFlags | LoadFlag::Local;
+		if (flags & RTLD_NODELETE) loadFlags = loadFlags | LoadFlag::Nodelete;
+		if (flags & RTLD_NOLOAD) loadFlags = loadFlags | LoadFlag::Noload;
+	#ifdef RTLD_DEEPBIND
+		if (flags & RTLD_DEEPBIND) loadFlags = loadFlags | LoadFlag::Deepbind;
+	#endif // RTLD_DEEPBIND
+		return loadFlags;
+	}
 }

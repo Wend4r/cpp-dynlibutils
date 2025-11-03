@@ -8,7 +8,7 @@ set(PLATFORM_COMPILE_OPTIONS
 	-Wall
 	-Wno-array-bounds -Wno-attributes
 
-	-mtune=generic -mmmx -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2
+	-mtune=generic -mmmx -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2 -mavx2
 	-fvisibility=default -fPIC
 )
 

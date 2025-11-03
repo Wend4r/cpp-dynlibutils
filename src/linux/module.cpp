@@ -8,52 +8,56 @@
 
 #include <dynlibutils/module.hpp>
 #include <dynlibutils/memaddr.hpp>
+#include <dynlibutils/defer.hpp>
 
 #include <cstring>
 
+#if DYNLIBUTILS_ARCH_BITS == 64
+const unsigned char ELF_CLASS = ELFCLASS64;
+const uint16_t ELF_MACHINE = EM_X86_64;
+#else
+const unsigned char ELF_CLASS = ELFCLASS32;
+const uint16_t ELF_MACHINE = EM_386;
+#endif // DYNLIBUTILS_ARCH_BITS
+
 using namespace DynLibUtils;
 
-template<typename Mutex>
-CAssemblyModule<Mutex>::~CAssemblyModule()
+CModule::~CModule()
 {
-	if (IsValid())
-		dlclose(GetPtr());
+	if (m_handle)
+	{
+		dlclose(m_handle);
+		m_handle = nullptr;
+	}
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Initializes the module from module name
-// Input  : svModuleName
-//          bExtension
-// Output : bool
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-bool CAssemblyModule<Mutex>::InitFromName(const std::string_view svModuleName, bool bExtension)
+bool CModule::InitFromName(std::string_view moduleName, LoadFlag flags, const SearchDirs& additionalSearchDirectories, bool sections, bool extension)
 {
-	if (IsValid())
+	if (m_handle)
 		return false;
 
-	if (svModuleName.empty())
+	if (moduleName.empty())
 		return false;
 
-	std::string sModuleName(svModuleName);
-	if (!bExtension)
-		sModuleName.append(".so");
+	std::string name("lib");
+	name += moduleName;
+	if (!extension && !(name.find(".so.") != std::string::npos || name.find_last_of(".so") == name.length() - 3))
+		name += ".so";
 
 	struct dl_data
 	{
 		ElfW(Addr) addr;
-		const char* moduleName;
-		const char* modulePath;
-	} dldata{ 0, sModuleName.c_str(), {} };
+		std::string_view moduleName;
+		std::string_view modulePath;
+	} dldata{0, name.c_str(), {}};
 
-	dl_iterate_phdr([](dl_phdr_info* info, std::size_t /* size */, void* data)
+	dl_iterate_phdr([](dl_phdr_info* info, size_t /* size */, void* data)
 	{
-		dl_data* dldata = reinterpret_cast<dl_data*>(data);
+		auto* _dldata = static_cast<dl_data*>(data);
 
-		if (std::strstr(info->dlpi_name, dldata->moduleName) != nullptr)
-		{
-			dldata->addr = info->dlpi_addr;
-			dldata->modulePath = info->dlpi_name;
+		if (info->dlpi_name && info->dlpi_name[0] != '\0' && std::filesystem::path(info->dlpi_name).filename().native() == _dldata->moduleName) {
+			_dldata->addr = info->dlpi_addr;
+			_dldata->modulePath = info->dlpi_name;
 		}
 
 		return 0;
@@ -62,141 +66,178 @@ bool CAssemblyModule<Mutex>::InitFromName(const std::string_view svModuleName, b
 	if (!dldata.addr)
 		return false;
 
-	if (!LoadFromPath(dldata.modulePath, RTLD_LAZY | RTLD_NOLOAD))
+	if (!Init(dldata.modulePath, flags, additionalSearchDirectories, sections))
 		return false;
 
 	return true;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Initializes the module from module memory
-// Input  : pModuleMemory
-// Output : bool
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-bool CAssemblyModule<Mutex>::InitFromMemory(const CMemory pModuleMemory, bool bForce)
+bool CModule::InitFromMemory(CMemory moduleMemory, LoadFlag flags, const SearchDirs& additionalSearchDirectories, bool sections)
 {
-	if (IsValid() && !bForce)
+	if (m_handle)
 		return false;
 
-	if (!pModuleMemory.IsValid())
+	if (!moduleMemory)
 		return false;
 
 	Dl_info info;
-	if (!dladdr(pModuleMemory, &info) || !info.dli_fbase || !info.dli_fname)
+	if (!dladdr(moduleMemory, &info) || !info.dli_fbase || !info.dli_fname)
 		return false;
 
-	if (!LoadFromPath(info.dli_fname, RTLD_LAZY | RTLD_NOLOAD))
+	if (!Init(info.dli_fname, flags, additionalSearchDirectories, sections))
 		return false;
 
 	return true;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Initializes a module descriptors
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-bool CAssemblyModule<Mutex>::LoadFromPath(const std::string_view svModelePath, int flags)
+bool CModule::InitFromHandle(Handle moduleHandle, LoadFlag flags, const SearchDirs& additionalSearchDirectories, bool sections)
 {
-	void* handle = dlopen(svModelePath.data(), flags);
+	if (m_handle)
+		return false;
+
+	if (!moduleHandle)
+		return false;
+
+	const link_map* info{};
+	if (dlinfo(moduleHandle, RTLD_DI_LINKMAP, &info) != 0 || !info->l_addr || !info->l_name)
+		return false;
+
+	if (!Init(info->l_name, flags, additionalSearchDirectories, sections))
+		return false;
+
+	return true;
+}
+
+bool CModule::Init(std::filesystem::path modulePath, LoadFlag flags, const SearchDirs& /*additionalSearchDirectories*/, bool sections)
+{
+	void* handle = dlopen(modulePath.c_str(), TranslateLoading(flags));
 	if (!handle)
 	{
-		SaveLastError();
+		m_error = dlerror();
 		return false;
 	}
 
-	link_map* lmap;
-	if (dlinfo(handle, RTLD_DI_LINKMAP, &lmap) != 0)
+	m_handle = handle;
+	m_path = std::move(modulePath);
+
+	if (sections)
 	{
-		dlclose(handle);
+		return LoadSections();
+	}
+
+	return true;
+}
+
+bool CModule::LoadSections()
+{
+	const link_map* lmap;
+	if (dlinfo(m_handle, RTLD_DI_LINKMAP, &lmap) != 0)
+	{
+		m_error = dlerror();
 		return false;
 	}
+
+	/*
+		ElfW(Phdr) file = lmap->l_addr;
+
+		if (memcmp(ELFMAG, file->e_ident, SELFMAG) != 0)
+		{
+			m_error = "Not a valid ELF file.";
+			return false;
+		}
+
+		if (file->e_ident[EI_VERSION] != EV_CURRENT)
+		{
+			m_error = "Not a valid ELF file version.";
+			return false;
+		}
+
+		if (file->e_ident[EI_CLASS] != ELF_CLASS || file->e_machine != ELF_MACHINE || file->e_ident[EI_DATA] != ELFDATA2LSB)
+		{
+			m_error = "Not a valid ELF file architecture.";
+			return false;
+		}
+
+		if (file->e_type != ET_DYN)
+		{
+			m_error = "ELF file must be a dynamic library.";
+			return false;
+		}
+	*/
 
 	int fd = open(lmap->l_name, O_RDONLY);
 	if (fd == -1)
 	{
-		dlclose(handle);
+		m_error = "Failed to open the shared object file.";
 		return false;
 	}
 
-	struct stat st;
+	Defer _ = [&]()
+	{
+		close(fd);
+	};
+
+	struct stat st{};
 	if (fstat(fd, &st) == 0)
 	{
-		void* map = mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+		void* map = mmap(nullptr, static_cast<size_t>(st.st_size), PROT_READ, MAP_PRIVATE, fd, 0);
 		if (map != MAP_FAILED)
 		{
 			ElfW(Ehdr)* ehdr = static_cast<ElfW(Ehdr)*>(map);
-			ElfW(Shdr)* shdrs = reinterpret_cast<ElfW(Shdr)*>(reinterpret_cast<std::uintptr_t>(ehdr) + ehdr->e_shoff);
-			const char* strTab = reinterpret_cast<const char*>(reinterpret_cast<std::uintptr_t>(ehdr) + shdrs[ehdr->e_shstrndx].sh_offset);
+			ElfW(Shdr)* shdrs = reinterpret_cast<ElfW(Shdr)*>(reinterpret_cast<uintptr_t>(ehdr) + ehdr->e_shoff);
+			const char* strTab = reinterpret_cast<const char*>(reinterpret_cast<uintptr_t>(ehdr) + shdrs[ehdr->e_shstrndx].sh_offset);
 
-			for (auto i = 0; i < ehdr->e_shnum; ++i) // Loop through the sections.
+			// Loop through the sections.
+			for (auto i = 0; i < ehdr->e_shnum; ++i)
 			{
-				ElfW(Shdr)* shdr = reinterpret_cast<ElfW(Shdr)*>(reinterpret_cast<std::uintptr_t>(shdrs) + i * ehdr->e_shentsize);
-				if (*(strTab + shdr->sh_name) == '\0')
+				ElfW(Shdr)* shdr = reinterpret_cast<ElfW(Shdr)*>(reinterpret_cast<uintptr_t>(shdrs) + static_cast<uintptr_t>(i * ehdr->e_shentsize));
+				if (*(strTab + shdr->sh_name) == 0)
 					continue;
 
-				m_vecSections.emplace_back(static_cast<std::uintptr_t>(lmap->l_addr + shdr->sh_addr), shdr->sh_size, strTab + shdr->sh_name);
+				m_sections.emplace_back(strTab + shdr->sh_name, lmap->l_addr + shdr->sh_addr, shdr->sh_size);
 			}
 
-			munmap(map, st.st_size);
+			munmap(map, static_cast<size_t>(st.st_size));
 		}
 	}
 
-	close(fd);
-
-	SetPtr(handle);
-	m_sPath.assign(svModelePath);
-
-	m_pExecutableSection = GetSectionByName(".text");
-	assert(m_pExecutableSection != nullptr);
-
+	m_executableCode = GetSectionByName(".text");
 	return true;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Gets an address of a virtual method table by rtti type descriptor name
-// Input  : svTableName
-//          bDecorated
-// Output : CMemory
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::GetVirtualTable(const std::string_view svTableName, bool bDecorated) const
+CMemory CModule::GetVirtualTableByName(std::string_view tableName, bool decorated) const
 {
-	if (svTableName.empty())
-		return DYNLIB_INVALID_MEMORY;
+	if (tableName.empty())
+		return nullptr;
 
-	const Section_t *pReadOnlyData = GetSectionByName(".rodata"), *pReadOnlyRelocations = GetSectionByName(".data.rel.ro");
+	CModule::Section readOnlyData = GetSectionByName(".rodata"), readOnlyRelocations = GetSectionByName(".data.rel.ro");
+	if (!readOnlyData || !readOnlyRelocations)
+		return nullptr;
 
-	assert(pReadOnlyData != nullptr);
-	assert(pReadOnlyRelocations != nullptr);
+	std::string decoratedTableName(decorated ? tableName : std::to_string(tableName.length()) + std::string(tableName));
+	std::string mask(decoratedTableName.length() + 1, 'x');
 
-	if (!pReadOnlyData || !pReadOnlyRelocations)
-		return DYNLIB_INVALID_MEMORY;
-
-	std::string sDecoratedTableName(bDecorated ? svTableName : std::to_string(svTableName.length()) + std::string(svTableName));
-	std::string sMask(sDecoratedTableName.length() + 1, 'x');
-
-	CMemory typeInfoName = FindPattern(sDecoratedTableName.data(), sMask, nullptr, pReadOnlyData);
+	CMemory typeInfoName = FindPattern(decoratedTableName.data(), mask, nullptr, &readOnlyData);
 	if (!typeInfoName)
-		return DYNLIB_INVALID_MEMORY;
+		return nullptr;
 
-	CMemory referenceTypeName = FindPattern(&typeInfoName, "xxxxxxxx", nullptr, pReadOnlyRelocations); // Get reference to type name.
+	CMemory referenceTypeName = FindPattern(&typeInfoName, "xxxxxxxx", nullptr, &readOnlyRelocations);// Get reference to type name.
 	if (!referenceTypeName)
-		return DYNLIB_INVALID_MEMORY;
+		return nullptr;
 
-	CMemory typeInfo = referenceTypeName.Offset(-0x8); // Offset -0x8 to typeinfo.
+	CMemory typeInfo = referenceTypeName.Offset(-0x8);// Offset -0x8 to typeinfo.
 
-	for (const auto& sectionName : { std::string_view(".data.rel.ro"), std::string_view(".data.rel.ro.local") })
+	for (const auto& sectionName : {std::string_view(".data.rel.ro"), std::string_view(".data.rel.ro.local")})
 	{
-		const Section_t *pSection = GetSectionByName(sectionName);
-		if (!pSection)
+		CModule::Section section = GetSectionByName(sectionName);
+		if (!section)
 			continue;
 
-		CMemory reference;
-		while ((reference = FindPattern(&typeInfo, "xxxxxxxx", reference, pSection))) // Get reference typeinfo in vtable
+		CMemory reference;// Get reference typeinfo in vtable
+		while ((reference = FindPattern(&typeInfo, "xxxxxxxx", reference, &section)))
 		{
-			if (reference.Offset(-0x8).Get<int64_t>() == 0) // Offset to this.
-			{
+			// Offset to this.
+			if (reference.Offset(-0x8).Get<int64_t>() == 0) {
 				return reference.Offset(0x8);
 			}
 
@@ -204,31 +245,54 @@ CMemory CAssemblyModule<Mutex>::GetVirtualTable(const std::string_view svTableNa
 		}
 	}
 
-	return DYNLIB_INVALID_MEMORY;
+	return nullptr;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Gets an address of a virtual method table by rtti type descriptor name
-// Input  : svFunctionName
-// Output : CMemory
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::GetFunction(const std::string_view svFunctionName) const noexcept
+CMemory CModule::GetFunctionByName(std::string_view functionName) const noexcept
 {
-	return CMemory((IsValid() && !svFunctionName.empty()) ? dlsym(GetPtr(), svFunctionName.data()) : nullptr);
+	if (!m_handle)
+		return nullptr;
+
+	if (functionName.empty())
+		return nullptr;
+
+	return dlsym(m_handle, functionName.data());
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Returns the module base
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::GetBase() const noexcept
+CMemory CModule::GetBase() const noexcept
 {
-	return RCast<link_map*>()->l_addr;
+	return reinterpret_cast<link_map*>(m_handle)->l_addr;
 }
 
-template<typename Mutex>
-void CAssemblyModule<Mutex>::SaveLastError()
+namespace DynLibUtils
 {
-	m_sLastError = dlerror();
+	int TranslateLoading(LoadFlag flags) noexcept
+	{
+		int unixFlags = 0;
+		if (flags & LoadFlag::Lazy) unixFlags |= RTLD_LAZY;
+		if (flags & LoadFlag::Now) unixFlags |= RTLD_NOW;
+		if (flags & LoadFlag::Global) unixFlags |= RTLD_GLOBAL;
+		if (flags & LoadFlag::Local) unixFlags |= RTLD_LOCAL;
+		if (flags & LoadFlag::Nodelete) unixFlags |= RTLD_NODELETE;
+		if (flags & LoadFlag::Noload) unixFlags |= RTLD_NOLOAD;
+	#ifdef RTLD_DEEPBIND
+		if (flags & LoadFlag::Deepbind) unixFlags |= RTLD_DEEPBIND;
+	#endif // RTLD_DEEPBIND
+		return unixFlags;
+	}
+
+	LoadFlag TranslateLoading(int flags) noexcept
+	{
+		LoadFlag loadFlags = LoadFlag::Default;
+		if (flags & RTLD_LAZY) loadFlags = loadFlags | LoadFlag::Lazy;
+		if (flags & RTLD_NOW) loadFlags = loadFlags | LoadFlag::Now;
+		if (flags & RTLD_GLOBAL) loadFlags = loadFlags | LoadFlag::Global;
+		if (flags & RTLD_LOCAL) loadFlags = loadFlags | LoadFlag::Local;
+		if (flags & RTLD_NODELETE) loadFlags = loadFlags | LoadFlag::Nodelete;
+		if (flags & RTLD_NOLOAD) loadFlags = loadFlags | LoadFlag::Noload;
+	#ifdef RTLD_DEEPBIND
+		if (flags & RTLD_DEEPBIND) loadFlags = loadFlags | LoadFlag::Deepbind;
+	#endif // RTLD_DEEPBIND
+		return loadFlags;
+	}
 }

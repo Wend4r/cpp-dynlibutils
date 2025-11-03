@@ -8,25 +8,59 @@
 
 #include <dynlibutils/module.hpp>
 #include <dynlibutils/memaddr.hpp>
+#include <dynlibutils/defer.hpp>
 
 #include <cstring>
 #include <cmath>
 
-namespace DynLibUtils {
+#if DYNLIBUTILS_ARCH_BITS == 64
+const WORD PE_FILE_MACHINE = IMAGE_FILE_MACHINE_AMD64;
+const WORD PE_NT_OPTIONAL_HDR_MAGIC = IMAGE_NT_OPTIONAL_HDR64_MAGIC;
+#else
+const WORD PE_FILE_MACHINE = IMAGE_FILE_MACHINE_I386;
+const WORD PE_NT_OPTIONAL_HDR_MAGIC = IMAGE_NT_OPTIONAL_HDR32_MAGIC;
+#endif // DYNLIBUTILS_ARCH_BITS
 
-template<typename Mutex>
-CAssemblyModule<Mutex>::~CAssemblyModule()
-{
-	if (IsValid())
-		FreeLibrary(RCast<HMODULE>());
+using namespace DynLibUtils;
+
+static std::string GetErrorMessage() {
+	DWORD dwErrorCode = ::GetLastError();
+	if (dwErrorCode == 0) {
+		return {}; // No error message has been recorded
+	}
+
+	LPSTR messageBuffer = NULL;
+	const DWORD size = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM  | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ALLOCATE_BUFFER,
+									  NULL, // (not used with FORMAT_MESSAGE_FROM_SYSTEM)
+									  dwErrorCode,
+									  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+									  reinterpret_cast<LPSTR>(&messageBuffer),
+									  0,
+									  NULL);
+	if (!size) {
+		return "Unknown error code: " + std::to_string(dwErrorCode);
+	}
+
+	std::string buffer(messageBuffer, size);
+	LocalFree(messageBuffer);
+	return buffer;
 }
 
-static std::string GetModulePath(HMODULE hModule)
+CModule::~CModule() {
+
+	if (m_handle)
+	{
+		FreeLibrary(static_cast<HMODULE>(m_handle));
+		m_handle = nullptr;
+	}
+}
+
+static std::wstring GetModulePath(HMODULE hModule)
 {
-	std::string modulePath(MAX_PATH, '\0');
+	std::wstring modulePath(MAX_PATH, L'\0');
 	while (true)
 	{
-		size_t len = GetModuleFileNameA(hModule, modulePath.data(), static_cast<DWORD>(modulePath.length()));
+		size_t len = GetModuleFileNameW(hModule, modulePath.data(), static_cast<DWORD>(modulePath.length()));
 		if (len == 0)
 		{
 			modulePath.clear();
@@ -39,142 +73,190 @@ static std::string GetModulePath(HMODULE hModule)
 			break;
 		}
 		else
+		{
 			modulePath.resize(modulePath.length() * 2);
+		}
 	}
 
 	return modulePath;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Initializes the module from module name
-// Input  : svModuleName
-//          bExtension
-// Output : bool
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-bool CAssemblyModule<Mutex>::InitFromName(const std::string_view svModuleName, bool bExtension)
+bool CModule::InitFromName(std::string_view moduleName, LoadFlag flags, const SearchDirs& additionalSearchDirectories, bool sections, bool extension)
 {
-	if (IsValid())
+	if (m_handle)
 		return false;
 
-	if (svModuleName.empty())
+	if (moduleName.empty())
 		return false;
 
-	std::string sModuleName(svModuleName);
-	if (!bExtension)
-		sModuleName.append(".dll");
+	std::filesystem::path name(moduleName);
+	if (!extension && !name.has_extension())
+		name += ".dll";
 
-	HMODULE handle = GetModuleHandleA(sModuleName.c_str());
+	HMODULE handle = GetModuleHandleW(name.c_str());
 	if (!handle)
 		return false;
 
-	std::string modulePath = GetModulePath(handle);
-	if(modulePath.empty())
-		return false;
-
-	if (!LoadFromPath(modulePath, DONT_RESOLVE_DLL_REFERENCES))
-		return false;
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Initializes the module from module memory
-// Input  : pModuleMemory
-// Output : bool
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-bool CAssemblyModule<Mutex>::InitFromMemory(const CMemory pModuleMemory, bool bForce)
-{
-	if (IsValid() && !bForce)
-		return false;
-
-	if (!pModuleMemory.IsValid())
-		return false;
-
-	MEMORY_BASIC_INFORMATION mbi;
-	if (!VirtualQuery(pModuleMemory, &mbi, sizeof(mbi)))
-		return false;
-
-	std::string modulePath = GetModulePath(reinterpret_cast<HMODULE>(mbi.AllocationBase));
+	std::filesystem::path modulePath = ::GetModulePath(handle);
 	if (modulePath.empty())
 		return false;
 
-	if (!LoadFromPath(modulePath, DONT_RESOLVE_DLL_REFERENCES))
+	if (!Init(modulePath, flags, additionalSearchDirectories, sections))
 		return false;
 
 	return true;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Initializes a module descriptors
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-bool CAssemblyModule<Mutex>::LoadFromPath(const std::string_view svModelePath, int flags)
+bool CModule::InitFromMemory(CMemory moduleMemory, LoadFlag flags, const SearchDirs& additionalSearchDirectories, bool sections)
 {
-	HMODULE handle = LoadLibraryExA(svModelePath.data(), nullptr, flags);
-	if (!handle)
+	if (m_handle)
+		return false;
+
+	if (!moduleMemory)
+		return false;
+
+	MEMORY_BASIC_INFORMATION mbi;
+	if (!VirtualQuery(moduleMemory, &mbi, sizeof(mbi)))
+		return false;
+
+	std::wstring modulePath = ::GetModulePath(reinterpret_cast<HMODULE>(mbi.AllocationBase));
+	if (modulePath.empty())
+		return false;
+
+	if (!Init(modulePath, flags, additionalSearchDirectories, sections))
+		return false;
+
+	return true;
+}
+
+bool CModule::InitFromHandle(Handle moduleHandle, LoadFlag flags, const SearchDirs& additionalSearchDirectories, bool sections)
+{
+	if (m_handle)
+		return false;
+
+	if (!moduleHandle)
+		return false;
+
+	std::wstring modulePath = ::GetModulePath(reinterpret_cast<HMODULE>(static_cast<void*>(moduleHandle)));
+	if (modulePath.empty())
+		return false;
+
+	if (!Init(modulePath, flags, additionalSearchDirectories, sections))
+		return false;
+
+	return true;
+}
+
+bool CModule::Init(std::filesystem::path modulePath, LoadFlag flags, const SearchDirs& additionalSearchDirectories, bool sections)
+{
+	std::vector<DLL_DIRECTORY_COOKIE> dirCookies;
+	dirCookies.reserve(additionalSearchDirectories.size());
+	for (const auto& directory : additionalSearchDirectories)
 	{
-		SaveLastError();
+		DLL_DIRECTORY_COOKIE cookie = AddDllDirectory(directory.c_str());
+		if (cookie == nullptr)
+			continue;
+		dirCookies.push_back(cookie);
+	}
+
+	Defer _ = [&]()
+	{
+		for (auto& cookie : dirCookies)
+			RemoveDllDirectory(cookie);
+	};
+
+	HMODULE hModule = LoadLibraryExW(modulePath.c_str(), nullptr, TranslateLoading(flags));
+	if (!hModule)
+	{
+		m_error = GetErrorMessage();
 		return false;
 	}
 
-	IMAGE_DOS_HEADER* pDOSHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(handle);
-	IMAGE_NT_HEADERS64* pNTHeaders = reinterpret_cast<IMAGE_NT_HEADERS64*>(reinterpret_cast<std::uintptr_t>(handle) + pDOSHeader->e_lfanew);
+	m_handle = hModule;
+	m_path = std::move(modulePath);
 
-	const IMAGE_SECTION_HEADER* hSection = IMAGE_FIRST_SECTION(pNTHeaders); // Get first image section.
+	if (flags & LoadFlag::PinInMemory) {
+		HMODULE hPinHandle = NULL;
+		GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN, reinterpret_cast<LPCWSTR>(hModule), &hPinHandle);
+	}
 
-	for (WORD i = 0; i < pNTHeaders->FileHeader.NumberOfSections; ++i) // Loop through the sections.
+	if (sections)
 	{
+		LoadSections();
+	}
+
+	return true;
+}
+
+bool CModule::LoadSections()
+{
+	IMAGE_DOS_HEADER* pDOSHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(m_handle);
+	IMAGE_NT_HEADERS* pNTHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<uintptr_t>(m_handle) + pDOSHeader->e_lfanew);
+	/*
+		IMAGE_FILE_HEADER* pFileHeader = &pNTHeaders->OptionalHeader;
+		IMAGE_OPTIONAL_HEADER* pOptionalHeader = &pNTHeaders->OptionalHeader;;
+
+		if (pDOSHeader->e_magic != IMAGE_DOS_SIGNATURE || pNTHeaders->Signature != IMAGE_NT_SIGNATURE || pOptionalHeader->Magic != PE_NT_OPTIONAL_HDR_MAGIC)
+		{
+			m_error = "Not a valid DLL file.";
+			return false;
+		}
+
+		if (pFileHeader->Machine != PE_FILE_MACHINE)
+		{
+			m_error = "Not a valid DLL file architecture.";
+			return false;
+		}
+
+		if ((pFileHeader->Characteristics & IMAGE_FILE_DLL) == 0)
+		{
+			m_error = "DLL file must be a dynamic library.";
+			return false;
+		}
+	*/
+	const IMAGE_SECTION_HEADER* hSection = IMAGE_FIRST_SECTION(pNTHeaders);// Get first image section.
+
+	// Loop through the sections
+	for (WORD i = 0; i < pNTHeaders->FileHeader.NumberOfSections; ++i) {
 		const IMAGE_SECTION_HEADER& hCurrentSection = hSection[i]; // Get current section.
-		m_vecSections.emplace_back(static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(handle) + hCurrentSection.VirtualAddress), hCurrentSection.SizeOfRawData, reinterpret_cast<const char*>(hCurrentSection.Name)); // Push back a struct with the section data.
+		m_sections.emplace_back(
+			reinterpret_cast<const char*>(hCurrentSection.Name),
+			reinterpret_cast<uintptr_t>(m_handle) + hCurrentSection.VirtualAddress,
+			hCurrentSection.SizeOfRawData);// Push back a struct with the section data.
 	}
 
-	SetPtr(static_cast<void *>(handle));
-	m_sPath.assign(svModelePath);
-
-	m_pExecutableSection = GetSectionByName(".text");
-	assert(m_pExecutableSection != nullptr);
+	m_executableCode = GetSectionByName(".text");
 
 	return true;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Gets an address of a virtual method table by rtti type descriptor name
-// Input  : svTableName
-//          bDecorated
-// Output : CMemory
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::GetVirtualTable(const std::string_view svTableName, bool bDecorated) const
+CMemory CModule::GetVirtualTableByName(std::string_view tableName, bool decorated) const
 {
-	if (svTableName.empty())
-		return DYNLIB_INVALID_MEMORY;
+	if (tableName.empty())
+		return nullptr;
 
-	const Section_t *pRunTimeData = GetSectionByName(".data"), *pReadOnlyData = GetSectionByName(".rdata");
+	CModule::Section runTimeData = GetSectionByName(".data"), readOnlyData = GetSectionByName(".rdata");
+	if (!runTimeData || !readOnlyData)
+		return nullptr;
 
-	assert(pRunTimeData != nullptr);
-	assert(pReadOnlyData != nullptr);
+	std::string decoratedTableName(decorated ? tableName : ".?AV" + std::string(tableName) + "@@");
+	std::string mask(decoratedTableName.length() + 1, 'x');
 
-	std::string sDecoratedTableName(bDecorated ? svTableName : ".?AV" + std::string(svTableName) + "@@");
-	std::string sMask(sDecoratedTableName.length() + 1, 'x');
-
-	CMemory typeDescriptorName = FindPattern(sDecoratedTableName.data(), sMask, nullptr, pRunTimeData);
+	CMemory typeDescriptorName = FindPattern(decoratedTableName.data(), mask, nullptr, &runTimeData);
 	if (!typeDescriptorName)
-		return DYNLIB_INVALID_MEMORY;
+		return nullptr;
 
 	CMemory rttiTypeDescriptor = typeDescriptorName.Offset(-0x10);
-	std::uintptr_t rttiTDRva = rttiTypeDescriptor.GetAddr() - GetBase().GetAddr(); // The RTTI gets referenced by a 4-Byte RVA address. We need to scan for that address.
+	const uintptr_t rttiTDRva = rttiTypeDescriptor - GetBase();// The RTTI gets referenced by a 4-Byte RVA address. We need to scan for that address.
 
-	CMemory reference;
-	while ((reference = FindPattern(&rttiTDRva, "xxxx", reference, pReadOnlyData))) // Get reference typeinfo in vtable
+	CMemory reference; // Get reference typeinfo in vtable
+	while ((reference = FindPattern(&rttiTDRva, "xxxx", reference, &readOnlyData)))
 	{
 		// Check if we got a RTTI Object Locator for this reference by checking if -0xC is 1, which is the 'signature' field which is always 1 on x64.
 		// Check that offset of this vtable is 0
-		if (reference.Offset(-0xC).Get<int32_t>() == 1 && reference.Offset(-0x8).Get<int32_t>() == 0)
-		{
+		if (reference.Offset(-0xC).Get<int32_t>() == 1 && reference.Offset(-0x8).Get<int32_t>() == 0) {
 			CMemory referenceOffset = reference.Offset(-0xC);
-			CMemory rttiCompleteObjectLocator = FindPattern(&referenceOffset, "xxxxxxxx", nullptr, pReadOnlyData);
+			CMemory rttiCompleteObjectLocator = FindPattern(&referenceOffset, "xxxxxxxx", nullptr, &readOnlyData);
 			if (rttiCompleteObjectLocator)
 				return rttiCompleteObjectLocator.Offset(0x8);
 		}
@@ -182,52 +264,66 @@ CMemory CAssemblyModule<Mutex>::GetVirtualTable(const std::string_view svTableNa
 		reference.OffsetSelf(0x4);
 	}
 
-	return DYNLIB_INVALID_MEMORY;
+	return nullptr;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Gets an address of a virtual method table by rtti type descriptor name
-// Input  : svFunctionName
-// Output : CMemory
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::GetFunction(const std::string_view svFunctionName) const noexcept
+CMemory CModule::GetFunctionByName(std::string_view functionName) const noexcept
 {
-	return CMemory((IsValid() && !svFunctionName.empty()) ? GetProcAddress(static_cast<HMODULE>(GetPtr()), svFunctionName.data()) : nullptr);
+	if (!m_handle)
+		return nullptr;
+
+	if (functionName.empty())
+		return nullptr;
+
+	return GetProcAddress(static_cast<HMODULE>(m_handle), functionName.data());
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Returns the module base
-//-----------------------------------------------------------------------------
-template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::GetBase() const noexcept
+CMemory CModule::GetBase() const noexcept
 {
-	return *this;
+	return m_handle;
 }
 
-template<typename Mutex>
-void CAssemblyModule<Mutex>::SaveLastError()
+namespace DynLibUtils
 {
-	auto errorCode = ::GetLastError();
-	if (errorCode == 0) {
-		return;
+	int TranslateLoading(LoadFlag flags) noexcept
+	{
+		int winFlags = 0;
+		if (flags & LoadFlag::DontResolveDllReferences) winFlags |= DONT_RESOLVE_DLL_REFERENCES;
+		if (flags & LoadFlag::AlteredSearchPath) winFlags |= LOAD_WITH_ALTERED_SEARCH_PATH;
+		if (flags & LoadFlag::AsDatafile) winFlags |= LOAD_LIBRARY_AS_DATAFILE;
+		if (flags & LoadFlag::AsDatafileExclusive) winFlags |= LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE;
+		if (flags & LoadFlag::AsImageResource) winFlags |= LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+		if (flags & LoadFlag::SearchApplicationDir) winFlags |= LOAD_LIBRARY_SEARCH_APPLICATION_DIR;
+		if (flags & LoadFlag::SearchDefaultDirs) winFlags |= LOAD_LIBRARY_SEARCH_DEFAULT_DIRS;
+		if (flags & LoadFlag::SearchDllLoadDir) winFlags |= LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR;
+		if (flags & LoadFlag::SearchSystem32) winFlags |= LOAD_LIBRARY_SEARCH_SYSTEM32;
+		if (flags & LoadFlag::SearchUserDirs) winFlags |= LOAD_LIBRARY_SEARCH_USER_DIRS;
+		if (flags & LoadFlag::RequireSignedTarget) winFlags |= LOAD_LIBRARY_REQUIRE_SIGNED_TARGET;
+		if (flags & LoadFlag::IgnoreAuthzLevel) winFlags |= LOAD_IGNORE_CODE_AUTHZ_LEVEL;
+	#ifdef LOAD_LIBRARY_SAFE_CURRENT_DIRS
+		if (flags & LoadFlag::SafeCurrentDirs) winFlags |= LOAD_LIBRARY_SAFE_CURRENT_DIRS;
+	#endif // LOAD_LIBRARY_SAFE_CURRENT_DIRS
+		return winFlags;
 	}
 
-	LPSTR messageBuffer = nullptr;
-
-	size_t size = FormatMessageA(
-			FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-			nullptr,
-			errorCode,
-			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			reinterpret_cast<LPSTR>(&messageBuffer),
-			0,
-			nullptr
-	);
-
-	m_sLastError.assign(messageBuffer, size);
-
-	LocalFree(messageBuffer);
+	LoadFlag TranslateLoading(int flags) noexcept
+	{
+		LoadFlag loadFlags = LoadFlag::Default;
+		if (flags & DONT_RESOLVE_DLL_REFERENCES) loadFlags = loadFlags | LoadFlag::DontResolveDllReferences;
+		if (flags & LOAD_WITH_ALTERED_SEARCH_PATH) loadFlags = loadFlags | LoadFlag::AlteredSearchPath;
+		if (flags & LOAD_LIBRARY_AS_DATAFILE) loadFlags = loadFlags | LoadFlag::AsDatafile;
+		if (flags & LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE) loadFlags = loadFlags | LoadFlag::AsDatafileExclusive;
+		if (flags & LOAD_LIBRARY_AS_IMAGE_RESOURCE) loadFlags = loadFlags | LoadFlag::AsImageResource;
+		if (flags & LOAD_LIBRARY_SEARCH_APPLICATION_DIR) loadFlags = loadFlags | LoadFlag::SearchApplicationDir;
+		if (flags & LOAD_LIBRARY_SEARCH_DEFAULT_DIRS) loadFlags = loadFlags | LoadFlag::SearchDefaultDirs;
+		if (flags & LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR) loadFlags = loadFlags | LoadFlag::SearchDllLoadDir;
+		if (flags & LOAD_LIBRARY_SEARCH_SYSTEM32) loadFlags = loadFlags | LoadFlag::SearchSystem32;
+		if (flags & LOAD_LIBRARY_SEARCH_USER_DIRS) loadFlags = loadFlags | LoadFlag::SearchUserDirs;
+		if (flags & LOAD_LIBRARY_REQUIRE_SIGNED_TARGET) loadFlags = loadFlags | LoadFlag::RequireSignedTarget;
+		if (flags & LOAD_IGNORE_CODE_AUTHZ_LEVEL) loadFlags = loadFlags | LoadFlag::IgnoreAuthzLevel;
+	#ifdef LOAD_LIBRARY_SAFE_CURRENT_DIRS
+		if (flags & LOAD_LIBRARY_SAFE_CURRENT_DIRS) loadFlags = loadFlags | LoadFlag::SafeCurrentDirs;
+	#endif // LOAD_LIBRARY_SAFE_CURRENT_DIRS
+		return loadFlags;
+	}
 }
-
-}; // namespace DynLibUtils
