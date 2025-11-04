@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -439,7 +440,7 @@ public:
 	template<std::size_t SIZE = (s_nDefaultPatternSize - 1) / 2>
 	inline CMemory FindPattern(const CMemoryView<std::uint8_t> pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
 	{
-		volatile const auto* pPattern = pPatternMem.RCastView();
+		const auto* pPattern = pPatternMem.RCastView();
 
 		CCache sKey(pPattern, svMask.size(), pStartAddress, pModuleSection);
 		if (auto pAddr = GetAddress(sKey))
@@ -468,65 +469,76 @@ public:
 			pData = start;
 		}
 
-		constexpr auto kSimdBytes = sizeof(__m128i); // 128 bits = 16 bytes.
-		constexpr auto kMaxSimdBlocks = std::max<std::size_t>(1u, std::min<std::size_t>(SIZE, s_nMaxSimdBlocks));
+#if !DYNLIBUTILS_ARCH_ARM
+		std::array<int, 64> masks = {};// 64*16 = enough masks for 1024 bytes.
+		auto numMasks = static_cast<std::uint8_t>(std::ceil(static_cast<float>(patternSize) / 16.f));
 
-		const std::size_t numBlocks = (patternSize + (kSimdBytes - 1)) / kSimdBytes;
-
-		std::uint16_t bitMasks[kMaxSimdBlocks] = {};
-		__m128i patternChunks[kMaxSimdBlocks];
-
-		for (std::size_t n = 0; n < numBlocks; ++n)
+		for (std::uint8_t i = 0; i < numMasks; ++i)
 		{
-			const std::size_t offset = n * kSimdBytes;
-			patternChunks[n] = _mm_loadu_si128(reinterpret_cast<const __m128i*>(const_cast<std::uint8_t*>(pPattern) + offset));
-
-			for (std::size_t j = 0; j < kSimdBytes; ++j)
+			for (std::int8_t j = static_cast<std::int8_t>(std::min<std::size_t>(patternSize - i * 16, 16)) - 1; j >= 0; --j)
 			{
-				const std::size_t idx = offset + j;
-				if (idx >= patternSize)
-					break;
-
-				if (svMask[idx] == 'x')
-					bitMasks[n] |= (1u << j);
+				if (svMask[static_cast<std::size_t>(i * 16 + j)] == 'x')
+				{
+					masks[i] |= 1 << j;
+				}
 			}
 		}
 
-		// How far ahead (in bytes) to prefetch during scanning.
-		// This is calculated based on how many SIMD blocks (16 bytes each) will be read
-		// in the current pattern match attempt.
-		//
-		// Helps reduce cache misses during large linear memory scans by hinting the CPU
-		// to load the next block of memory before it is needed.
-		const std::size_t lookAhead = numBlocks * kSimdBytes;
-
-		for (; pData <= pEnd; ++pData)
+		const __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pPattern));
+		__m128i xmm2, xmm3, msks;
+		for (; pData != pEnd; _mm_prefetch(reinterpret_cast<const char*>(++pData + 64), _MM_HINT_NTA))
 		{
-			if (static_cast<std::size_t>(pEnd - pData) > lookAhead)
-				_mm_prefetch(reinterpret_cast<const char*>(pData + lookAhead), _MM_HINT_NTA);
-
-			bool bFound = true;
-
-			for (std::size_t n = 0; n < numBlocks; ++n)
+			xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData));
+			msks = _mm_cmpeq_epi8(xmm1, xmm2);
+			if ((_mm_movemask_epi8(msks) & masks[0]) == masks[0])
 			{
-				const __m128i dataChunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData + n * kSimdBytes));
-				const __m128i cmp = _mm_cmpeq_epi8(dataChunk, patternChunks[n]);
-				const int mask = _mm_movemask_epi8(cmp);
-
-				if ((mask & bitMasks[n]) != bitMasks[n])
+				bool found = true;
+				for (uint8_t i = 1; i < numMasks; ++i)
 				{
-					bFound = false;
+					xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pData + i * 16)));
+					xmm3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pPattern + i * 16)));
+					msks = _mm_cmpeq_epi8(xmm2, xmm3);
+					if ((_mm_movemask_epi8(msks) & masks[i]) != masks[i])
+					{
+						found = false;
+						break;
+					}
+				}
+
+				if (found)
+				{
+					UniqueLock_t lock(m_mutex);
+					m_mapCached[std::move(sKey)] = pData;
+					return pData;
+				}
+			}
+		}
+#else
+		for (; pData != pEnd; ++pData)
+		{
+			bool found = false;
+
+			for (size_t i = 0; i < maskLen; ++i)
+			{
+				if (mask[i] == 'x' || pPattern[i] == *(pData + i))
+				{
+					found = true;
+				}
+				else
+				{
+					found = false;
 					break;
 				}
 			}
 
-			if (bFound)
+			if (found)
 			{
 				UniqueLock_t lock(m_mutex);
 				m_mapCached[std::move(sKey)] = pData;
 				return pData;
 			}
 		}
+#endif // !DYNLIBUTILS_ARCH_ARM
 
 		return DYNLIB_INVALID_MEMORY;
 	}

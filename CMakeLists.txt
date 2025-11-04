@@ -34,6 +34,15 @@ set(SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 include(cmake/platform/shared.cmake)
 
+detect_system()
+detect_compiler()
+
+if(DYNLIBUTILS_CPU_ARCH_ARM64 OR DYNLIBUTILS_CPU_ARCH_ARM32)
+	set(IS_ARM TRUE)
+else()
+	set(IS_ARM FALSE)
+endif()
+
 if(WINDOWS)
 	include(cmake/platform/windows.cmake)
 elseif(LINUX)
@@ -47,6 +56,8 @@ set(COMPILE_DEFINITIONS
 	DYNLIBUTILS_PLATFORM_LINUX=$<BOOL:${LINUX}>
 	DYNLIBUTILS_PLATFORM_WINDOWS=$<BOOL:${WIN32}>
 	DYNLIBUTILS_PLATFORM_APPLE=$<BOOL:${APPLE}>
+	DYNLIBUTILS_ARCH_ARM=$<BOOL:${IS_ARM}>
+	DYNLIBUTILS_ARCH_BITS=$<IF:$<EQUAL:${CMAKE_SIZEOF_VOID_P},8>,64,32>
 )
 
 set(INCLUDE_DIRS
