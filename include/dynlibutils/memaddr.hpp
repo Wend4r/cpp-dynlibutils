@@ -148,14 +148,24 @@ public:
 	{
 		std::uintptr_t base = m_addr;
 
-		while (base && deref--)
+		while (deref)
 		{
 			base = *reinterpret_cast<std::uintptr_t*>(base + offset);
+			deref--;
 		}
 
 		return base;
 	}
-	CMemory& DerefSelf(int deref = 1, std::ptrdiff_t offset = 0) noexcept { while (m_addr && deref--) m_addr = *reinterpret_cast<std::uintptr_t*>(m_addr + offset); return *this; }
+	CMemory& DerefSelf(int deref = 1, std::ptrdiff_t offset = 0) noexcept
+	{
+		while (deref)
+		{
+			m_addr = *reinterpret_cast<std::uintptr_t*>(m_addr + offset);
+			deref--;
+		}
+
+		return *this;
+	}
 
 	CMemory FollowNearCall(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5) const noexcept { return ResolveRelativeAddress(opcodeOffset, nextInstructionOffset); }
 	CMemory& FollowNearCallSelf(const std::ptrdiff_t opcodeOffset = 0x1, const std::ptrdiff_t nextInstructionOffset = 0x5) noexcept { return ResolveRelativeAddressSelf(opcodeOffset, nextInstructionOffset); }
