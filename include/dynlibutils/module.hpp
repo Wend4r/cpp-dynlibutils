@@ -437,124 +437,20 @@ public:
 	//          *pModuleSection
 	// Output : CMemory
 	//-----------------------------------------------------------------------------
-	template<std::size_t SIZE = (s_nDefaultPatternSize - 1) / 2>
-	inline CMemory FindPattern(const CMemoryView<std::uint8_t> pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
-	{
-		const auto* pPattern = pPatternMem.RCastView();
-
-		CCache sKey(pPattern, svMask.size(), pStartAddress, pModuleSection);
-		if (auto pAddr = GetAddress(sKey))
-		{
-			return pAddr;
-		}
-
-		const Section_t* pSection = pModuleSection ? pModuleSection : m_pExecutableSection;
-
-		if (!pSection || !pSection->IsValid())
-			return DYNLIB_INVALID_MEMORY;
-
-		const std::uintptr_t base = pSection->GetAddr();
-		const std::size_t sectionSize = pSection->m_nSectionSize;
-		const std::size_t patternSize = svMask.size();
-
-		auto* pData = reinterpret_cast<std::uint8_t*>(base);
-		const auto* pEnd = pData + sectionSize - patternSize;
-
-		if (pStartAddress)
-		{
-			auto* start = pStartAddress.RCast<std::uint8_t*>();
-			if (start < pData || start > pEnd)
-				return DYNLIB_INVALID_MEMORY;
-
-			pData = start;
-		}
-
-#if !DYNLIBUTILS_ARCH_ARM
-		std::array<int, 64> masks = {};// 64*16 = enough masks for 1024 bytes.
-		auto numMasks = static_cast<std::uint8_t>(std::ceil(static_cast<float>(patternSize) / 16.f));
-
-		for (std::uint8_t i = 0; i < numMasks; ++i)
-		{
-			for (std::int8_t j = static_cast<std::int8_t>(std::min<std::size_t>(patternSize - i * 16, 16)) - 1; j >= 0; --j)
-			{
-				if (svMask[static_cast<std::size_t>(i * 16 + j)] == 'x')
-				{
-					masks[i] |= 1 << j;
-				}
-			}
-		}
-
-		const __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pPattern));
-		__m128i xmm2, xmm3, msks;
-		for (; pData != pEnd; _mm_prefetch(reinterpret_cast<const char*>(++pData + 64), _MM_HINT_NTA))
-		{
-			xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData));
-			msks = _mm_cmpeq_epi8(xmm1, xmm2);
-			if ((_mm_movemask_epi8(msks) & masks[0]) == masks[0])
-			{
-				bool found = true;
-				for (uint8_t i = 1; i < numMasks; ++i)
-				{
-					xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pData + i * 16)));
-					xmm3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pPattern + i * 16)));
-					msks = _mm_cmpeq_epi8(xmm2, xmm3);
-					if ((_mm_movemask_epi8(msks) & masks[i]) != masks[i])
-					{
-						found = false;
-						break;
-					}
-				}
-
-				if (found)
-				{
-					UniqueLock_t lock(m_mutex);
-					m_mapCached[std::move(sKey)] = pData;
-					return pData;
-				}
-			}
-		}
-#else
-		for (; pData != pEnd; ++pData)
-		{
-			bool found = false;
-
-			for (size_t i = 0; i < maskLen; ++i)
-			{
-				if (mask[i] == 'x' || pPattern[i] == *(pData + i))
-				{
-					found = true;
-				}
-				else
-				{
-					found = false;
-					break;
-				}
-			}
-
-			if (found)
-			{
-				UniqueLock_t lock(m_mutex);
-				m_mapCached[std::move(sKey)] = pData;
-				return pData;
-			}
-		}
-#endif // !DYNLIBUTILS_ARCH_ARM
-
-		return DYNLIB_INVALID_MEMORY;
-	}
+	CMemory FindPattern(const CMemoryView<std::uint8_t> pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const;
 
 	template<std::size_t SIZE>
 	[[nodiscard]]
 	inline CMemory FindPattern(const Pattern_t<SIZE>& copyPattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
-		return FindPattern<SIZE>(copyPattern.m_aBytes.data(), std::string_view(copyPattern.m_aMask.data(), copyPattern.m_nSize), pStartAddress, pModuleSection);
+		return FindPattern(copyPattern.m_aBytes.data(), std::string_view(copyPattern.m_aMask.data(), copyPattern.m_nSize), pStartAddress, pModuleSection);
 	}
 
 	template<std::size_t SIZE>
 	[[nodiscard]]
 	inline CMemory FindPattern(Pattern_t<SIZE>&& movePattern, const CMemory pStartAddress = nullptr, const Section_t* pModuleSection = nullptr) const
 	{
-		return FindPattern<SIZE>(std::move(movePattern.m_aBytes).data(), std::string_view(std::move(movePattern.m_aMask).data(), std::move(movePattern.m_nSize)), pStartAddress, pModuleSection);
+		return FindPattern(std::move(movePattern.m_aBytes).data(), std::string_view(std::move(movePattern.m_aMask).data(), std::move(movePattern.m_nSize)), pStartAddress, pModuleSection);
 	}
 
 	template<std::size_t SIZE, PatternCallback_t FUNC>
