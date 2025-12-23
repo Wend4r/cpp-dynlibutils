@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <type_traits>
 
 namespace DynLibUtils {
 
@@ -223,10 +224,7 @@ public:
 	{
 		auto found = Find(CVirtualTable(pThis));
 
-		if (found.first == found.second)
-		{
-			return {};
-		}
+		assert(found.first != found.second);
 
 		return found.first->second.Call(pThis, args...);
 	}
@@ -240,10 +238,7 @@ public:
 
 		auto found = Find(CVirtualTable(pThis));
 
-		if (found.first == found.second)
-		{
-			return results;
-		}
+		assert(found.first != found.second);
 
 		// results.reserve(vhooks.size());
 
@@ -389,14 +384,26 @@ public:
 
 				auto &callbacks = found->second;
 
-				R result {};
-
-				for (auto it : callbacks)
+				if constexpr (std::is_void_v<R>)
 				{
-					result = it(pClass, args...);
-				}
+					for (const auto &callback : callbacks)
+					{
+						callback(pClass, args...);
+					}
 
-				return result;
+					return;
+				}
+				else
+				{
+					R result {};
+
+					for (const auto &callback : callbacks)
+					{
+						result = callback(pClass, args...);
+					}
+
+					return result;
+				}
 			}
 		);
 	}
