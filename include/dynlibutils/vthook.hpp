@@ -111,7 +111,17 @@ public:
 	// to the original implementation’s logic. For example, in your hooked method body, 
 	// you can call `hookInstance.Call(...);` to execute the original virtual method with  
 	// the supplied arguments. If not called in the hook, the original logic will not run.
-	R Call(Args... args) const { return GetOrigin<Function_t>()(args...); }
+	R Call(Args... args) const
+	{
+		if constexpr (std::is_void_v<R>)
+		{
+			GetOrigin<Function_t>()(args...);
+
+			return;
+		}
+
+		return GetOrigin<Function_t>()(args...);
+	}
 
 protected: // Implementation methods.
 	void HookImpl(Function_t pfnTarget) noexcept
@@ -174,16 +184,20 @@ protected:
 	inline static Function_t sm_callback;
 }; // class CVTFHook<R, Args...>
 
-// A template class represents generic manager for multiple virtual‐table hooks of the same signature.
-// Template Parameter:
-//   T — A hook element type, which must:
+// A template class represents a generic manager for multiple virtual-table hooks of the same signature.
+// Template Parameters:
+//   TH - A hook element template (e.g., CVTHook or CVTFHook).
+//   R     - Return type of the virtual method.
+//   C     - Pointer type of the class instance (this pointer).
+//   Args  - Remaining argument types.
+//       Hook element type must:
 //         * Define a nested alias Function_t (e.g., R(*)(Args...)).
 //         * Provide methods:
 //             - void Hook(CVirtualTable, std::ptrdiff_t, Function_t)
 //             - R    Call(C*, Args...) (or similar overloads)
 //             - bool  Unhook(), etc.
-//       Typical instantiations might be CVTHook<R,Args...> or CVTFHook<R,Args...>.
-template<class T>
+//       Typical instantiations might be CVTHook<R, Args...> or CVTFHook<R, Args...>.
+template<template<typename, typename...> class TH, typename R, typename C, typename ...Args>
 class CVTMHookBase
 {
 public:
@@ -191,7 +205,7 @@ public:
 	CVTMHookBase(const CVTMHookBase &other) = delete;
 	CVTMHookBase(CVTMHookBase &&other) = default;
 
-	using Element_t = T;
+	using Element_t = TH<R, C, Args...>;
 	using Function_t = typename Element_t::Function_t;
 
 public:
@@ -219,22 +233,28 @@ public:
 		return m_storage.emplace(pVTable, std::move(vth));
 	}
 
-	template<typename R, typename C, typename ...Args>
 	R Call(C pThis, Args... args)
 	{
 		auto found = Find(CVirtualTable(pThis));
 
 		assert(found.first != found.second);
 
+		if constexpr (std::is_void_v<R>)
+		{
+			found.first->second.Call(pThis, args...);
+
+			return;
+		}
+
 		return found.first->second.Call(pThis, args...);
 	}
 
 	// Returns a vector containing the return values from each hook’s Call() invocation, 
 	// in order of insertion. If no hooks were found for that vtable, returns an empty vector.
-	template<typename R, typename C, typename ...Args>
-	std::vector<R> CallAll(C pThis, Args... args)
+	template<typename Ret = R, typename = std::enable_if_t<!std::is_void_v<Ret>>>
+	std::vector<Ret> CallAll(C pThis, Args... args)
 	{
-		std::vector<R> results;
+		std::vector<Ret> results;
 
 		auto found = Find(CVirtualTable(pThis));
 
@@ -250,36 +270,16 @@ public:
 		return results;
 	}
 
-	// Returns true if at least one hook was executed; false if no hooks were found for that vtable.
-	template<typename C, typename ...Args>
-	bool CallAllNoReturn(C pThis, Args... args)
-	{
-		auto found = Find(CVirtualTable(pThis));
-
-		if (found.first == found.second)
-		{
-			return false;
-		}
-
-		// results.reserve(vhooks.size());
-
-		for (auto it = found.first; it != found.second; it++)
-		{
-			it->second.Call(pThis, args...);
-		}
-
-		return true;
-	}
 	// erases all hook elements associated with that vtable.
 	//   - Returns the number of elements removed (std::size_t).
 	std::size_t RemoveHook(CVirtualTable pVTable) { return m_storage.erase(pVTable); }
 
 private:
 	std::multimap<CVirtualTable, Element_t> m_storage;
-}; // class CVTMHookBase<T, FUNC>
+}; // class CVTMHookBase<TH, R, C, Args...>
 
 template<typename R, typename ...Args>
-using CVTMHook = CVTMHookBase<CVTHook<R, Args...>>;
+using CVTMHook = CVTMHookBase<CVTHook, R, Args...>;
 
 // A template class manages multiple virtual‐table hooks per class instance, where each hook can 
 // execute multiple callbacks (std::function) when the original virtual method is invoked.
