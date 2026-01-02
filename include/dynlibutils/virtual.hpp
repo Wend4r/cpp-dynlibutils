@@ -20,10 +20,10 @@
 
 namespace DynLibUtils {
 
-template<auto METHOD>
+template<typename F, F METHOD>
 constexpr std::ptrdiff_t GetVirtualIndex() noexcept
 {
-	static_assert(std::is_member_function_pointer_v<decltype(METHOD)>, "Templated method must be a pointer-to-member-function");
+	static_assert(std::is_member_function_pointer_v<F>, "Templated method must be a pointer-to-member-function");
 
 	// --- Itanium C++ ABI: PMF.ptr = 1 + offset_in_bytes for virtual ones ---
 	struct ItaniumPMF
@@ -36,7 +36,7 @@ constexpr std::ptrdiff_t GetVirtualIndex() noexcept
 
 		std::ptrdiff_t adj;
 	};
-	constexpr union { decltype(METHOD) m; ItaniumPMF pmf; } u{ METHOD };
+	constexpr union { F m; ItaniumPMF pmf; } u{ METHOD };
 
 #if defined(_MSC_VER)
 	auto *pAddr = reinterpret_cast<unsigned char *>(u.pmf.ptr);
@@ -129,6 +129,7 @@ constexpr std::ptrdiff_t GetVirtualIndex() noexcept
 
 	return DYNLIB_INVALID_VCALL;
 }
+template<auto METHOD> constexpr std::ptrdiff_t GetVirtualIndex() noexcept { return GetVirtualIndex<decltype(METHOD), METHOD>(); }
 
 // Provides an interface to manipulate and invoke entries from a class's virtual table (vtable).
 class CVirtualTable
