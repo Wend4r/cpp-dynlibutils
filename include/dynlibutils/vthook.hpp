@@ -116,11 +116,12 @@ public:
 		if constexpr (std::is_void_v<R>)
 		{
 			GetOrigin<Function_t>()(args...);
-
 			return;
 		}
-
-		return GetOrigin<Function_t>()(args...);
+		else
+		{
+			return GetOrigin<Function_t>()(args...);
+		}
 	}
 
 protected: // Implementation methods.
