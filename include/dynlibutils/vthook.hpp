@@ -381,13 +381,12 @@ public:
 			{
 				auto found = sm_vcallbacks.find(CVirtualTable(pClass));
 
-				assert(found != sm_vcallbacks.cend());
-
-				auto &callbacks = found->second;
-
 				if constexpr (std::is_void_v<R>)
 				{
-					for (const auto &callback : callbacks)
+					if (found == sm_vcallbacks.cend())
+						return;
+
+					for (const auto &callback : found->second)
 					{
 						callback(pClass, args...);
 					}
@@ -398,7 +397,10 @@ public:
 				{
 					R result {};
 
-					for (const auto &callback : callbacks)
+					if (found == sm_vcallbacks.cend())
+						return result;
+
+					for (const auto &callback : found->second)
 					{
 						result = callback(pClass, args...);
 					}
