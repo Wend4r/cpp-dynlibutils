@@ -407,6 +407,7 @@ public:
 	explicit CAssemblyModule(const std::string& sModuleName) : CAssemblyModule(std::string_view(sModuleName)) {}
 
 	bool LoadFromPath(const std::string_view svModelePath, int flags);
+	bool LoadFromPath(const std::string_view svModelePath);
 
 	bool InitFromName(const std::string_view svModuleName, bool bExtension = false);
 	bool InitFromMemory(const CMemory pModuleMemory, bool bForce = true);

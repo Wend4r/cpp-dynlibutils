@@ -72,7 +72,7 @@ bool CAssemblyModule<Mutex>::InitFromName(const std::string_view svModuleName, b
 	if(modulePath.empty())
 		return false;
 
-	if (!LoadFromPath(modulePath, DONT_RESOLVE_DLL_REFERENCES))
+	if (!LoadFromPath(modulePath))
 		return false;
 
 	return true;
@@ -100,7 +100,7 @@ bool CAssemblyModule<Mutex>::InitFromMemory(const CMemory pModuleMemory, bool bF
 	if (modulePath.empty())
 		return false;
 
-	if (!LoadFromPath(modulePath, DONT_RESOLVE_DLL_REFERENCES))
+	if (!LoadFromPath(modulePath))
 		return false;
 
 	return true;
@@ -137,6 +137,12 @@ bool CAssemblyModule<Mutex>::LoadFromPath(const std::string_view svModelePath, i
 	assert(m_pExecutableSection != nullptr);
 
 	return true;
+}
+
+template<typename Mutex>
+bool CAssemblyModule<Mutex>::LoadFromPath(const std::string_view svModelePath)
+{
+	return LoadFromPath(svModelePath, DONT_RESOLVE_DLL_REFERENCES);
 }
 
 //-----------------------------------------------------------------------------

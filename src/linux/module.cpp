@@ -62,7 +62,7 @@ bool CAssemblyModule<Mutex>::InitFromName(const std::string_view svModuleName, b
 	if (!dldata.addr)
 		return false;
 
-	if (!LoadFromPath(dldata.modulePath, RTLD_LAZY | RTLD_NOLOAD))
+	if (!LoadFromPath(dldata.modulePath))
 		return false;
 
 	return true;
@@ -86,7 +86,7 @@ bool CAssemblyModule<Mutex>::InitFromMemory(const CMemory pModuleMemory, bool bF
 	if (!dladdr(pModuleMemory, &info) || !info.dli_fbase || !info.dli_fname)
 		return false;
 
-	if (!LoadFromPath(info.dli_fname, RTLD_LAZY | RTLD_NOLOAD))
+	if (!LoadFromPath(info.dli_fname))
 		return false;
 
 	return true;
@@ -151,6 +151,12 @@ bool CAssemblyModule<Mutex>::LoadFromPath(const std::string_view svModelePath, i
 	assert(m_pExecutableSection != nullptr);
 
 	return true;
+}
+
+template<typename Mutex>
+bool CAssemblyModule<Mutex>::LoadFromPath(const std::string_view svModelePath)
+{
+	return LoadFromPath(svModelePath, RTLD_LAZY);
 }
 
 //-----------------------------------------------------------------------------
