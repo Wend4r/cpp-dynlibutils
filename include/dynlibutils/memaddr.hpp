@@ -108,17 +108,17 @@ public:
 	constexpr operator std::uintptr_t() const noexcept { return GetAddr(); }
 
 	/// Compare operators.
-	bool operator==(const CMemory right) const noexcept { return m_addr == right.m_addr; }
-	bool operator!=(const CMemory right) const noexcept { return !operator==(right); }
-	bool operator<(const CMemory right) const noexcept { return m_addr < right.m_addr; }
+	bool operator==(const CMemory& right) const noexcept { return m_addr == right.m_addr; }
+	bool operator!=(const CMemory& right) const noexcept { return !operator==(right); }
+	bool operator<(const CMemory& right) const noexcept { return m_addr < right.m_addr; }
 
 	// Addition and subtraction operators.
 	CMemory operator+(const std::size_t right) const noexcept { return Offset(right); }
 	CMemory operator-(const std::size_t right) const noexcept { return Offset(-static_cast<std::ptrdiff_t>(right)); }
 	CMemory operator+(const std::ptrdiff_t right) const noexcept { return Offset(right); }
 	CMemory operator-(const std::ptrdiff_t right) const noexcept { return Offset(-right); }
-	CMemory operator+(const CMemory right) const noexcept { return Offset(static_cast<std::ptrdiff_t>(right.m_addr)); }
-	CMemory operator-(const CMemory right) const noexcept { return Offset(static_cast<std::ptrdiff_t>(right.m_addr)); }
+	CMemory operator+(const CMemory& right) const noexcept { return Offset(static_cast<std::ptrdiff_t>(right.m_addr)); }
+	CMemory operator-(const CMemory& right) const noexcept { return Offset(-static_cast<std::ptrdiff_t>(right.m_addr)); }
 
 	/// Cast methods.
 	template<typename PTR> constexpr PTR CCast() const noexcept { return (PTR)m_addr; }
@@ -263,12 +263,12 @@ public:
 	using CThis = CMemoryView<T>;
 
 	// Addition and subtraction operators (view ones).
-	CMemory operator+(const std::size_t right) const noexcept { return Offset(right); }
-	CMemory operator-(const std::size_t right) const noexcept { return Offset(-right); }
-	CMemory operator+(const std::ptrdiff_t right) const noexcept { return Offset(right); }
-	CMemory operator-(const std::ptrdiff_t right) const noexcept { return Offset(-right); }
-	CMemory operator+(const CMemory right) const noexcept { return Offset(static_cast<std::ptrdiff_t>(right.GetAddr())); }
-	CMemory operator-(const CMemory right) const noexcept { return Offset(static_cast<std::ptrdiff_t>(right.GetAddr())); }
+	CMemoryView operator+(const std::size_t right) const noexcept { return Offset(right); }
+	CMemoryView operator-(const std::size_t right) const noexcept { return Offset(-right); }
+	CMemoryView operator+(const std::ptrdiff_t right) const noexcept { return Offset(right); }
+	CMemoryView operator-(const std::ptrdiff_t right) const noexcept { return Offset(-right); }
+	CMemoryView operator+(const CMemory& right) const noexcept { return Offset(static_cast<std::ptrdiff_t>(right.GetAddr())); }
+	CMemoryView operator-(const CMemory& right) const noexcept { return Offset(-static_cast<std::ptrdiff_t>(right.GetAddr())); }
 
 	/// Cast methods (view ones).
 	constexpr T* CCastView() const noexcept { return CBase::CCast<T*>(); }
@@ -276,7 +276,7 @@ public:
 	constexpr T* UCastView() const noexcept { return CBase::UCast<T*>(); }
 
 	/// Access methods (view ones).
-	constexpr T* GetPtr() const noexcept { return CBase::RCast<T*>(); }
+	constexpr T* GetPtr() const noexcept { return RCastView(); }
 	constexpr std::uintptr_t GetAddr() const noexcept { return CBase::RCast<T*>(); }
 	constexpr T& GetRef() const noexcept { return *GetPtr(); }
 	constexpr T Get() const { return GetRef(); }

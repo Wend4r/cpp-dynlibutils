@@ -62,10 +62,30 @@ struct Pattern_t
 	static constexpr std::size_t sm_nMaxSize = SIZE;
 
 	// Constructors.
-	constexpr Pattern_t(const Pattern_t<SIZE>& copyFrom) noexcept : m_nSize(copyFrom.m_nSize), m_aBytes(copyFrom.m_aBytes), m_aMask(copyFrom.m_aMask) {}
-	constexpr Pattern_t(Pattern_t<SIZE>&& moveFrom) noexcept : m_nSize(std::move(moveFrom.m_nSize)), m_aBytes(std::move(moveFrom.m_aBytes)), m_aMask(std::move(moveFrom.m_aMask)) {}
+	constexpr Pattern_t(const Pattern_t<SIZE>& copyFrom) noexcept { CopyFrom(copyFrom); }
+	constexpr Pattern_t(Pattern_t<SIZE>&& moveFrom) noexcept { MoveFrom(std::move(moveFrom)); }
 	constexpr Pattern_t(std::size_t size = 0, const std::array<uint8_t, SIZE>& bytes = {}, const std::array<char, SIZE>& mask = {}) noexcept : m_nSize(size), m_aBytes(bytes), m_aMask(mask) {} // Default one.
 	constexpr Pattern_t(std::size_t &&size, std::array<uint8_t, SIZE>&& bytes, const std::array<char, SIZE>&& mask) noexcept : m_nSize(std::move(size)), m_aBytes(std::move(bytes)), m_aMask(std::move(mask)) {}
+	Pattern_t& operator=(const Pattern_t<SIZE>& copyFrom) { return CopyFrom(); }
+	Pattern_t& operator=(Pattern_t<SIZE>&& moveFrom) { return MoveFrom(std::move(moveFrom)); }
+
+	Pattern_t& CopyFrom(const Pattern_t<SIZE>& other)
+	{
+		m_nSize = other.m_nSize;
+		m_aBytes = other.m_aBytes;
+		m_aMask = other.m_aMask;
+
+		return *this;
+	}
+
+	Pattern_t& MoveFrom(Pattern_t<SIZE>&& other)
+	{
+		m_nSize = other.m_nSize;
+		m_aBytes = std::move(other.m_aBytes);
+		m_aMask = std::move(other.m_aMask);
+
+		return *this;
+	}
 
 	// Fields. Available to anyone (so structure).
 	std::size_t m_nSize;
@@ -290,7 +310,7 @@ struct CCache
 	CCache(
 		const volatile std::uint8_t* pPatternMem,
 		const size_t nSize,
-		const CMemory pStartAddress = nullptr,
+		const CMemory& pStartAddress = nullptr,
 		const Section_t* pModuleSection = nullptr
 	)
 		: m_svPattern(pPatternMem, pPatternMem + nSize)
@@ -321,13 +341,14 @@ struct CCache
 
 struct CHash
 {
+	static constexpr std::size_t m_nGoldenRatio = 0x9e3779b9u;
+
 	std::size_t operator()(const CCache& k) const noexcept
 	{
-		static constexpr std::size_t golden_ratio = 0x9e3779b9u;
 		std::size_t h = std::hash<std::string>()(k.m_svPattern);
-		h ^= std::hash<uintptr_t>()(k.m_nStart) + golden_ratio + (h << 6) + (h >> 2);
-		h ^= std::hash<uintptr_t>()(k.m_pSectionAddr) + golden_ratio + (h << 6) + (h >> 2);
-		h ^= std::hash<size_t>()(k.m_nSectionSize) + golden_ratio + (h << 6) + (h >> 2);
+		h ^= std::hash<uintptr_t>()(k.m_nStart) + m_nGoldenRatio + (h << 6) + (h >> 2);
+		h ^= std::hash<uintptr_t>()(k.m_pSectionAddr) + m_nGoldenRatio + (h << 6) + (h >> 2);
+		h ^= std::hash<size_t>()(k.m_nSectionSize) + m_nGoldenRatio + (h << 6) + (h >> 2);
 		return h;
 	}
 };
@@ -359,24 +380,42 @@ public:
 
 	public:
 		constexpr CSignatureView() : m_pModule(nullptr) {}
-		constexpr CSignatureView(CSignatureView&& moveFrom) : Base_t(std::move(moveFrom)), m_pModule(std::move(moveFrom.m_pModule)) {}
+		constexpr CSignatureView(const CSignatureView& copyFrom) { CopyFrom(copyFrom); }
+		constexpr CSignatureView(CSignatureView&& moveFrom) { MoveFrom(std::move(moveFrom)); }
 		constexpr CSignatureView(const Base_t& pattern, CAssemblyModule* module) : Base_t(pattern), m_pModule(module) {}
 		constexpr CSignatureView(Base_t&& pattern, CAssemblyModule* module) : Base_t(std::move(pattern)), m_pModule(module) {}
+		CSignatureView& operator=(const CSignatureView& copyFrom) { return CopyFrom(copyFrom); }
+		CSignatureView& operator=(CSignatureView&& moveFrom) { return MoveFrom(std::move(moveFrom)); }
+
+		CSignatureView& CopyFrom(const CSignatureView& other)
+		{
+			Base_t::CopyFrom(other);
+			m_pModule = other.m_pModule;
+
+			return *this;
+		}
+		CSignatureView& MoveFrom(CSignatureView&& other)
+		{
+			Base_t::MoveFrom(std::move(other));
+			m_pModule = std::exchange(other.m_pModule, nullptr);
+
+			return *this;
+		}
 
 		bool IsValid() const { return m_pModule && m_pModule->IsValid(); }
 
 		[[nodiscard]]
-		CMemory operator()(const CMemory pStart = nullptr, const Section_t* pSection = nullptr) const
+		CMemory operator()(const CMemory& pStart = nullptr, const Section_t* pSection = nullptr) const
 		{
 			return Find(pStart, pSection);
 		}
 
-		[[nodiscard]] CMemory Find(const CMemory pStart, const Section_t* pSection = nullptr) const
+		[[nodiscard]] CMemory Find(const CMemory& pStart, const Section_t* pSection = nullptr) const
 		{
 			return m_pModule->FindPattern<SIZE>(CMemory(Base_t::m_aBytes.data()), std::string_view(Base_t::m_aMask.data(), Base_t::m_nSize), pStart, pSection);
 		}
 		[[nodiscard]] CMemory OffsetAndFind(const std::ptrdiff_t offset, CMemory pStart, const Section_t* pSection = nullptr) const { return Find(pStart + offset, pSection); }
-		[[nodiscard]] CMemory OffsetFromSelfAndFind(const CMemory pStart, const Section_t* pSection = nullptr) const { return OffsetAndFind(Base_t::m_nSize, pStart, pSection); }
+		[[nodiscard]] CMemory OffsetFromSelfAndFind(const CMemory& pStart, const Section_t* pSection = nullptr) const { return OffsetAndFind(Base_t::m_nSize, pStart, pSection); }
 		[[nodiscard]] CMemory DerefAndFind(const std::uintptr_t deref, CMemory pStart, const Section_t* pSection = nullptr) const { return Find(pStart.Deref(deref), pSection); }
 	}; // class CSignatureView<SIZE>
 
@@ -399,18 +438,30 @@ public:
 	~CAssemblyModule();
 
 	CAssemblyModule(const CAssemblyModule&) = delete;
-	CAssemblyModule& operator=(const CAssemblyModule&) = delete;
-	CAssemblyModule(CAssemblyModule&& other) noexcept : CMemory(std::exchange(static_cast<CMemory &>(other), DYNLIB_INVALID_MEMORY)), m_sPath(std::move(other.m_sPath)), m_vecSections(std::move(other.m_vecSections)), m_pExecutableSection(std::move(other.m_pExecutableSection)) {}
-	CAssemblyModule(const CMemory pModuleMemory);
+	CAssemblyModule(CAssemblyModule&& moveFrom) noexcept { MoveFrom(std::move(moveFrom)); }
+	CAssemblyModule(const CMemory& pModuleMemory);
 	explicit CAssemblyModule(const std::string_view svModuleName);
 	explicit CAssemblyModule(const char* pszModuleName) : CAssemblyModule(std::string_view(pszModuleName)) {}
 	explicit CAssemblyModule(const std::string& sModuleName) : CAssemblyModule(std::string_view(sModuleName)) {}
+	CAssemblyModule &operator=(const CAssemblyModule&) = delete;
+	CAssemblyModule &operator=(CAssemblyModule&& moveFrom) { return MoveFrom(std::move(moveFrom)); }
+
+	CAssemblyModule &CopyFrom(const CAssemblyModule&) = delete;
+	CAssemblyModule &MoveFrom(CAssemblyModule&& other)
+	{
+		*static_cast<CMemory *>(this) = std::exchange(static_cast<CMemory &>(other), DYNLIB_INVALID_MEMORY);
+		m_sPath = std::move(other.m_sPath);
+		m_vecSections = std::move(other.m_vecSections);
+		m_pExecutableSection = std::move(other.m_pExecutableSection);
+
+		return *this;
+	}
 
 	bool LoadFromPath(const std::string_view svModelePath, int flags);
 	bool LoadFromPath(const std::string_view svModelePath);
 
 	bool InitFromName(const std::string_view svModuleName, bool bExtension = false);
-	bool InitFromMemory(const CMemory pModuleMemory, bool bForce = true);
+	bool InitFromMemory(const CMemory& pModuleMemory, bool bForce = true);
 
 	template<std::size_t N>
 	[[nodiscard]]
@@ -438,7 +489,7 @@ public:
 	//          *pModuleSection
 	// Output : CMemory
 	//-----------------------------------------------------------------------------
-	CMemory FindPattern(const CMemoryView<std::uint8_t> pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const;
+	CMemory FindPattern(const CMemoryView<std::uint8_t>& pPatternMem, const std::string_view svMask, const CMemory& pStartAddress, const Section_t* pModuleSection) const;
 
 	template<std::size_t SIZE>
 	[[nodiscard]]

@@ -17,6 +17,7 @@ template<typename Mutex>
 CAssemblyModule<Mutex>::CAssemblyModule(const std::string_view szModuleName)
 {
 	InitFromName(szModuleName);
+	m_pExecutableSection = nullptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -24,9 +25,10 @@ CAssemblyModule<Mutex>::CAssemblyModule(const std::string_view szModuleName)
 // Input  : pModuleMemory
 //-----------------------------------------------------------------------------
 template<typename Mutex>
-CAssemblyModule<Mutex>::CAssemblyModule(const CMemory pModuleMemory)
+CAssemblyModule<Mutex>::CAssemblyModule(const CMemory& pModuleMemory)
 {
 	InitFromMemory(pModuleMemory);
+	m_pExecutableSection = nullptr;
 }
 
 template<typename Mutex>
@@ -74,7 +76,7 @@ CMemory CAssemblyModule<Mutex>::GetAddress(const CCache& hKey) const noexcept
 }
 
 template<typename Mutex>
-CMemory CAssemblyModule<Mutex>::FindPattern(const CMemoryView<std::uint8_t> pPatternMem, const std::string_view svMask, const CMemory pStartAddress, const Section_t* pModuleSection) const
+CMemory CAssemblyModule<Mutex>::FindPattern(const CMemoryView<std::uint8_t>& pPatternMem, const std::string_view svMask, const CMemory& pStartAddress, const Section_t* pModuleSection) const
 {
 	const auto* pPattern = pPatternMem.RCastView();
 

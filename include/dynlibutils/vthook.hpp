@@ -47,7 +47,7 @@ public:
 
 	CVTHook() = default;
 	CVTHook(const CVTHook &other) = delete;
-	CVTHook(CVTHook &&other) : CMemory(std::exchange(static_cast<CMemory &>(other), DYNLIB_INVALID_MEMORY)), m_pOriginalFn(std::exchange(static_cast<CMemory &>(other.m_pOriginalFn), DYNLIB_INVALID_MEMORY)) {}
+	CVTHook(CVTHook &&other) { MoveFrom(std::move(other)); }
 	~CVTHook()
 	{
 		if (IsHooked())
@@ -55,6 +55,16 @@ public:
 			UnhookImpl();
 		}
 	}
+
+	CVTHook &CopyFrom(const CVTHook &other) = delete;
+	CVTHook &MoveFrom(CVTHook &&other)
+	{
+		*static_cast<CMemory *>(this) = std::exchange(static_cast<CMemory &>(other), DYNLIB_INVALID_MEMORY);
+		m_pOriginalFn = std::exchange(static_cast<CMemory &>(other.m_pOriginalFn), DYNLIB_INVALID_MEMORY);
+
+		return *this;
+	}
+
 
 	bool IsHooked() const noexcept { return IsValid(); } // Returns true if a hook is currently installed (i.e., we have a valid vtable slot pointer).
 	void Clear() noexcept { SetPtr(nullptr); m_pOriginalFn = nullptr; }

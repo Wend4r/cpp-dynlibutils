@@ -84,7 +84,7 @@ bool CAssemblyModule<Mutex>::InitFromName(const std::string_view svModuleName, b
 // Output : bool
 //-----------------------------------------------------------------------------
 template<typename Mutex>
-bool CAssemblyModule<Mutex>::InitFromMemory(const CMemory pModuleMemory, bool bForce)
+bool CAssemblyModule<Mutex>::InitFromMemory(const CMemory& pModuleMemory, bool bForce)
 {
 	if (IsValid() && !bForce)
 		return false;
