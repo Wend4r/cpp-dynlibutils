@@ -14,10 +14,9 @@ using namespace DynLibUtils;
 // Input  : szModuleName (without extension .dll/.so)
 //-----------------------------------------------------------------------------
 template<typename Mutex>
-CAssemblyModule<Mutex>::CAssemblyModule(const std::string_view szModuleName)
+CAssemblyModule<Mutex>::CAssemblyModule(const std::string_view szModuleName) : m_pExecutableSection(nullptr)
 {
 	InitFromName(szModuleName);
-	m_pExecutableSection = nullptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -25,10 +24,9 @@ CAssemblyModule<Mutex>::CAssemblyModule(const std::string_view szModuleName)
 // Input  : pModuleMemory
 //-----------------------------------------------------------------------------
 template<typename Mutex>
-CAssemblyModule<Mutex>::CAssemblyModule(const CMemory& pModuleMemory)
+CAssemblyModule<Mutex>::CAssemblyModule(const CMemory& pModuleMemory) : m_pExecutableSection(nullptr)
 {
 	InitFromMemory(pModuleMemory);
-	m_pExecutableSection = nullptr;
 }
 
 template<typename Mutex>
