@@ -12,7 +12,8 @@
 #include <cstring>
 #include <cmath>
 
-namespace DynLibUtils {
+namespace DynLibUtils
+{
 
 template<typename Mutex>
 CAssemblyModule<Mutex>::~CAssemblyModule()
@@ -127,7 +128,7 @@ bool CAssemblyModule<Mutex>::LoadFromPath(const std::string_view svModelePath, i
 	for (WORD i = 0; i < pNTHeaders->FileHeader.NumberOfSections; ++i) // Loop through the sections.
 	{
 		const IMAGE_SECTION_HEADER& hCurrentSection = hSection[i]; // Get current section.
-		m_vecSections.emplace_back(static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(handle) + hCurrentSection.VirtualAddress), hCurrentSection.SizeOfRawData, reinterpret_cast<const char*>(hCurrentSection.Name)); // Push back a struct with the section data.
+		m_vecSections.emplace_back(static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(handle) + hCurrentSection.VirtualAddress), hCurrentSection.Misc.VirtualSize, reinterpret_cast<const char*>(hCurrentSection.Name)); // Push back a struct with the section data.
 	}
 
 	SetPtr(static_cast<void *>(handle));
